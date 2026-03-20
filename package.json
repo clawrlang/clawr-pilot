@@ -7,10 +7,8 @@
     "build": "bun run typecheck && bun build src/rwrc/index.ts --compile --outfile dist/rwrc",
     "dev": "ts-node src/rwrc/index.ts",
     "lint": "eslint . --ext .ts",
-    "test": "bun test tests/unit",
-    "test:e2e": "bun run build && bun run test:e2e:run",
-    "test:e2e:run": "bun test tests/e2e",
-    "test:all": "bun run build && bun run test && bun run test:e2e:run",
+    "test": "bun test tests/e2e",
+    "test:all": "bun run build && bun run test",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "author": "",

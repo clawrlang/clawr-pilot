@@ -1,0 +1,12 @@
+quotient::Digits: [ 1 -7378697629483820646 ]
+remainder::0
+quotient::Digits: [ 1 -9223372036854775807 ]
+remainder::-4
+quotient::Digits: [ 9223372036854775807 ]
+remainder::5
+quotient::Digits: [ -1 7378697629483820646 ]
+remainder::0
+quotient::Digits: [ -1 9223372036854775807 ]
+remainder::4
+quotient::Digits: [ -9223372036854775807 ]
+remainder::-5
