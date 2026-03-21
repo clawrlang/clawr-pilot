@@ -59,3 +59,22 @@ describe('parser variable declaration semantics', () => {
         })
     }
 })
+
+describe('parser truthvalue literals', () => {
+    it('parses truthvalue declaration and print expression', () => {
+        const program = parseClawr(
+            'const maybe = ambiguous\nprint(maybe)',
+            'test',
+        )
+
+        expect(program.statements).toHaveLength(2)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            semantics: 'const',
+            initializer: {
+                kind: 'TruthLiteral',
+                value: 'ambiguous',
+            },
+        })
+    })
+})

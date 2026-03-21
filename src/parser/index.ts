@@ -10,6 +10,7 @@ import type {
     MemberExpression,
     Program,
     Statement,
+    TruthLiteralExpression,
     VariableDeclaration,
     VariableSemantics,
 } from '../ast'
@@ -141,6 +142,13 @@ export class Parser {
                 kind: 'IntegerLiteral',
                 value: token.value,
             } satisfies IntegerLiteralExpression
+        }
+
+        if (token.kind === 'TRUTH_LITERAL') {
+            return {
+                kind: 'TruthLiteral',
+                value: token.value,
+            } satisfies TruthLiteralExpression
         }
 
         throw parseError(

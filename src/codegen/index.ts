@@ -18,19 +18,21 @@ export function generateC(program: Program): string {
 
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
-    const locals: string[] = []
+    const heapLocals: string[] = []
+    const variableKinds = new Map<string, 'integer' | 'truthvalue'>()
     let tempCounter = 0
 
     for (const statement of program.statements) {
         lowerStatement(
             statement,
             mainStatements,
-            locals,
+            heapLocals,
+            variableKinds,
             () => `__clawr_tmp${tempCounter++}`,
         )
     }
 
-    for (const local of [...locals].reverse()) {
+    for (const local of [...heapLocals].reverse()) {
         mainStatements.push({
             kind: 'CExpressionStatement',
             expression: {
@@ -129,49 +131,73 @@ export function lowerToCIr(program: Program): CTranslationUnit {
 function lowerStatement(
     statement: Program['statements'][number],
     statements: CStatement[],
-    locals: string[],
+    heapLocals: string[],
+    variableKinds: Map<string, 'integer' | 'truthvalue'>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
-        lowerVariableDeclaration(statement, statements, locals)
+        lowerVariableDeclaration(
+            statement,
+            statements,
+            heapLocals,
+            variableKinds,
+        )
         return
     }
 
-    lowerExpressionStatement(statement, statements, nextTemp)
+    lowerExpressionStatement(statement, statements, variableKinds, nextTemp)
 }
 
 function lowerVariableDeclaration(
     statement: VariableDeclaration,
     statements: CStatement[],
-    locals: string[],
+    heapLocals: string[],
+    variableKinds: Map<string, 'integer' | 'truthvalue'>,
 ) {
-    if (statement.initializer.kind !== 'IntegerLiteral') {
-        throw new Error(
-            'Only integer literal variable initializers are supported in this vertical slice',
-        )
+    if (statement.initializer.kind === 'IntegerLiteral') {
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'Integer*',
+            name: statement.identifier.name,
+            initializer: {
+                kind: 'CCallExpression',
+                callee: 'clawr_int_from_i64',
+                args: [
+                    {
+                        kind: 'CIntegerLiteral',
+                        value: `${statement.initializer.value.toString()}LL`,
+                    },
+                ],
+            },
+        })
+        heapLocals.push(statement.identifier.name)
+        variableKinds.set(statement.identifier.name, 'integer')
+        return
     }
 
-    statements.push({
-        kind: 'CVariableDeclaration',
-        type: 'Integer*',
-        name: statement.identifier.name,
-        initializer: {
-            kind: 'CCallExpression',
-            callee: 'clawr_int_from_i64',
-            args: [
-                {
-                    kind: 'CIntegerLiteral',
-                    value: `${statement.initializer.value.toString()}LL`,
-                },
-            ],
-        },
-    })
-    locals.push(statement.identifier.name)
+    if (statement.initializer.kind === 'TruthLiteral') {
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'int',
+            name: statement.identifier.name,
+            initializer: {
+                kind: 'CIntegerLiteral',
+                value: cTruthValue(statement.initializer.value),
+            },
+        })
+        variableKinds.set(statement.identifier.name, 'truthvalue')
+        return
+    }
+
+    throw new Error(
+        'Only integer and truthvalue literal variable initializers are supported in this vertical slice',
+    )
 }
 
 function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
+    variableKinds: Map<string, 'integer' | 'truthvalue'>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -181,12 +207,13 @@ function lowerExpressionStatement(
         )
     }
 
-    lowerPrintCall(expr, statements, nextTemp)
+    lowerPrintCall(expr, statements, variableKinds, nextTemp)
 }
 
 function lowerPrintCall(
     call: CallExpression,
     statements: CStatement[],
+    variableKinds: Map<string, 'integer' | 'truthvalue'>,
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -197,7 +224,11 @@ function lowerPrintCall(
         throw new Error('print(...) must have exactly one argument')
     }
 
-    const render = lowerStringExpression(call.arguments[0], nextTemp)
+    const render = lowerStringExpression(
+        call.arguments[0],
+        variableKinds,
+        nextTemp,
+    )
     statements.push(...render.setup)
     statements.push({
         kind: 'CExpressionStatement',
@@ -227,8 +258,34 @@ function lowerPrintCall(
 
 function lowerStringExpression(
     expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; freeAfterUse: boolean } {
+    if (expression.kind === 'TruthLiteral') {
+        return {
+            setup: [],
+            value: {
+                kind: 'CStringLiteral',
+                value: expression.value,
+            },
+            freeAfterUse: false,
+        }
+    }
+
+    if (expression.kind === 'Identifier') {
+        const variableKind = variableKinds.get(expression.name)
+        if (variableKind === 'truthvalue') {
+            return {
+                setup: [],
+                value: {
+                    kind: 'CRawExpression',
+                    code: `(${expression.name} == 0 ? "false" : (${expression.name} == 2 ? "true" : "ambiguous"))`,
+                },
+                freeAfterUse: false,
+            }
+        }
+    }
+
     if (expression.kind === 'CallExpression') {
         if (
             expression.callee.kind === 'MemberExpression' &&
@@ -263,6 +320,17 @@ function lowerStringExpression(
     }
 
     throw new Error(
-        'Only <identifier>.toString() is supported as print argument',
+        'Only truthvalue expressions and <identifier>.toString() are supported as print arguments',
     )
+}
+
+function cTruthValue(value: 'false' | 'ambiguous' | 'true'): string {
+    switch (value) {
+        case 'false':
+            return '0'
+        case 'ambiguous':
+            return '1'
+        case 'true':
+            return '2'
+    }
 }

@@ -1,0 +1,4 @@
+const maybe = ambiguous
+print(false)
+print(maybe)
+print(true)

@@ -22,6 +22,7 @@ export interface ExpressionStatement {
 export type Expression =
     | IdentifierExpression
     | IntegerLiteralExpression
+    | TruthLiteralExpression
     | MemberExpression
     | CallExpression
 
@@ -33,6 +34,11 @@ export interface IdentifierExpression {
 export interface IntegerLiteralExpression {
     kind: 'IntegerLiteral'
     value: bigint
+}
+
+export interface TruthLiteralExpression {
+    kind: 'TruthLiteral'
+    value: 'false' | 'ambiguous' | 'true'
 }
 
 export interface MemberExpression {
