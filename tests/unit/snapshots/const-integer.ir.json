@@ -1,0 +1,181 @@
+{
+  "kind": "CTranslationUnit",
+  "includes": ["\"runtime.h\"", "<stdio.h>", "<stdlib.h>"],
+  "functions": [
+    {
+      "kind": "CFunction",
+      "isStatic": true,
+      "returnType": "Integer*",
+      "name": "clawr_int_from_i64",
+      "params": [
+        {
+          "type": "long long",
+          "name": "value"
+        }
+      ],
+      "statements": [
+        {
+          "kind": "CVariableDeclaration",
+          "type": "Array*",
+          "name": "digits",
+          "initializer": {
+            "kind": "CCallExpression",
+            "callee": "Array¸new",
+            "args": [
+              {
+                "kind": "CIntegerLiteral",
+                "value": "1"
+              },
+              {
+                "kind": "CSizeofExpression",
+                "typeName": "digit_t"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CAssignmentStatement",
+          "target": {
+            "kind": "CRawExpression",
+            "code": "ARRAY_ELEMENT_AT(0, digits, digit_t)"
+          },
+          "value": {
+            "kind": "CCastExpression",
+            "typeName": "digit_t",
+            "expression": {
+              "kind": "CIdentifier",
+              "name": "value"
+            }
+          }
+        },
+        {
+          "kind": "CVariableDeclaration",
+          "type": "Integer*",
+          "name": "result",
+          "initializer": {
+            "kind": "CCallExpression",
+            "callee": "Integer¸withDigits",
+            "args": [
+              {
+                "kind": "CIdentifier",
+                "name": "digits"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CExpressionStatement",
+          "expression": {
+            "kind": "CCallExpression",
+            "callee": "releaseRC",
+            "args": [
+              {
+                "kind": "CIdentifier",
+                "name": "digits"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CReturnStatement",
+          "value": {
+            "kind": "CIdentifier",
+            "name": "result"
+          }
+        }
+      ]
+    },
+    {
+      "kind": "CFunction",
+      "returnType": "int",
+      "name": "main",
+      "params": [],
+      "statements": [
+        {
+          "kind": "CVariableDeclaration",
+          "type": "Integer*",
+          "name": "x",
+          "initializer": {
+            "kind": "CCallExpression",
+            "callee": "clawr_int_from_i64",
+            "args": [
+              {
+                "kind": "CIntegerLiteral",
+                "value": "42LL"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CVariableDeclaration",
+          "type": "const char*",
+          "name": "__clawr_tmp0",
+          "initializer": {
+            "kind": "CCallExpression",
+            "callee": "Integer·toString",
+            "args": [
+              {
+                "kind": "CIdentifier",
+                "name": "x"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CExpressionStatement",
+          "expression": {
+            "kind": "CCallExpression",
+            "callee": "printf",
+            "args": [
+              {
+                "kind": "CStringLiteral",
+                "value": "%s\n"
+              },
+              {
+                "kind": "CIdentifier",
+                "name": "__clawr_tmp0"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CExpressionStatement",
+          "expression": {
+            "kind": "CCallExpression",
+            "callee": "free",
+            "args": [
+              {
+                "kind": "CCastExpression",
+                "typeName": "void*",
+                "expression": {
+                  "kind": "CIdentifier",
+                  "name": "__clawr_tmp0"
+                }
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CExpressionStatement",
+          "expression": {
+            "kind": "CCallExpression",
+            "callee": "releaseRC",
+            "args": [
+              {
+                "kind": "CIdentifier",
+                "name": "x"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CReturnStatement",
+          "value": {
+            "kind": "CIntegerLiteral",
+            "value": "0"
+          }
+        }
+      ]
+    }
+  ]
+}

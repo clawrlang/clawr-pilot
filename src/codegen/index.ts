@@ -16,7 +16,7 @@ export function generateC(program: Program): string {
     return emitC(lowerToCIr(program))
 }
 
-function lowerToCIr(program: Program): CTranslationUnit {
+export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const locals: string[] = []
     let tempCounter = 0
