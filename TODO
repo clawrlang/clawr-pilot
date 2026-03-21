@@ -1,0 +1,28 @@
+# TODO
+
+- `truthvalue` (`false`, `ambiguous`, `true`)
+- `real` (arbitrary precision)
+- `string`
+- Lattices: Replace types with value-sets
+  - enumerated (one or more distinct values)
+  - ranges (minimum and inclusive or exclusive maximum)
+  - length and regex matches for `string`
+  - Runtime: use simple C types when range and precision allow
+  - Static code-path analysis: Variables and expressions are compatible based on value-set
+  - `subset boolean = truthvalue @except(ambiguous)` or `subset boolean = truthvalue @values(false, true)`
+  - `subset natural = integer @range(0...)`
+- `data`, `object` and `service` types
+  - Heap allocated and reference counted
+  - `data` is a naked data structure — no methods
+  - `object` is encapsulated data — only accessed through methods
+  - `service` is like `object` but not restricted to its own heap memory
+- Validation: primitive values cannot be assigned to `ref` variables
+- Validation: `service` type cannot be assigned to `const`/`mut` variables
+- `trait` applicable to data-oriented type (i.e. `data` and `object`)
+- `role` applicable to `service` (`ref` only)
+
+## Clearly advanced (and maybe entirely out of scope)
+
+- Referential constraints such as `func add(a: integer, b: integer) -> integer @value(a+b)`
+- Staggered lattices `integer @range(1...10) \/ @range(55...100)` (where `\/` means union or join)
+- Optimise the AST code based on known value-sets
