@@ -9,6 +9,7 @@ import type {
     IntegerLiteralExpression,
     MemberExpression,
     Program,
+    RealLiteralExpression,
     Statement,
     TruthLiteralExpression,
     VariableDeclaration,
@@ -142,6 +143,13 @@ export class Parser {
                 kind: 'IntegerLiteral',
                 value: token.value,
             } satisfies IntegerLiteralExpression
+        }
+
+        if (token.kind === 'REAL_LITERAL') {
+            return {
+                kind: 'RealLiteral',
+                value: token.value.toString(),
+            } satisfies RealLiteralExpression
         }
 
         if (token.kind === 'TRUTH_LITERAL') {

@@ -78,3 +78,19 @@ describe('parser truthvalue literals', () => {
         })
     })
 })
+
+describe('parser real literals', () => {
+    it('parses real declaration with grouped digits', () => {
+        const program = parseClawr('const pi = 3.141_592_653', 'test')
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            semantics: 'const',
+            initializer: {
+                kind: 'RealLiteral',
+                value: '3.141592653',
+            },
+        })
+    })
+})

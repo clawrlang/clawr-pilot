@@ -1,6 +1,10 @@
 {
   "kind": "CTranslationUnit",
-  "includes": ["\"runtime.h\"", "<stdio.h>", "<stdlib.h>"],
+  "includes": [
+    "\"runtime.h\"",
+    "<stdio.h>",
+    "<stdlib.h>"
+  ],
   "functions": [
     {
       "kind": "CFunction",

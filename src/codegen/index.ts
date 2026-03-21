@@ -19,7 +19,7 @@ export function generateC(program: Program): string {
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
-    const variableKinds = new Map<string, 'integer' | 'truthvalue'>()
+    const variableKinds = new Map<string, 'integer' | 'truthvalue' | 'real'>()
     let tempCounter = 0
 
     for (const statement of program.statements) {
@@ -132,7 +132,7 @@ function lowerStatement(
     statement: Program['statements'][number],
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
@@ -152,7 +152,7 @@ function lowerVariableDeclaration(
     statement: VariableDeclaration,
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
         statements.push({
@@ -189,15 +189,36 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (statement.initializer.kind === 'RealLiteral') {
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'Real*',
+            name: statement.identifier.name,
+            initializer: {
+                kind: 'CCallExpression',
+                callee: 'Real¸fromString',
+                args: [
+                    {
+                        kind: 'CStringLiteral',
+                        value: statement.initializer.value,
+                    },
+                ],
+            },
+        })
+        heapLocals.push(statement.identifier.name)
+        variableKinds.set(statement.identifier.name, 'real')
+        return
+    }
+
     throw new Error(
-        'Only integer and truthvalue literal variable initializers are supported in this vertical slice',
+        'Only integer, truthvalue, and real literal variable initializers are supported in this vertical slice',
     )
 }
 
 function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
-    variableKinds: Map<string, 'integer' | 'truthvalue'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -213,7 +234,7 @@ function lowerExpressionStatement(
 function lowerPrintCall(
     call: CallExpression,
     statements: CStatement[],
-    variableKinds: Map<string, 'integer' | 'truthvalue'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -258,7 +279,7 @@ function lowerPrintCall(
 
 function lowerStringExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; freeAfterUse: boolean } {
     if (expression.kind === 'TruthLiteral') {
@@ -299,6 +320,18 @@ function lowerStringExpression(
                 )
             }
 
+            const variableKind = variableKinds.get(object.name)
+            let toStringCallee: 'Integer·toString' | 'Real·toString'
+            if (variableKind === 'integer') {
+                toStringCallee = 'Integer·toString'
+            } else if (variableKind === 'real') {
+                toStringCallee = 'Real·toString'
+            } else {
+                throw new Error(
+                    'toString() is currently supported only for integer and real variables',
+                )
+            }
+
             const temp = nextTemp()
             return {
                 setup: [
@@ -308,7 +341,7 @@ function lowerStringExpression(
                         name: temp,
                         initializer: {
                             kind: 'CCallExpression',
-                            callee: 'Integer·toString',
+                            callee: toStringCallee,
                             args: [{ kind: 'CIdentifier', name: object.name }],
                         },
                     },

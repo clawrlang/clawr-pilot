@@ -4,5 +4,6 @@
 #include "refc.h"
 #include "integer.h"
 #include "array.h"
+#include "real.h"
 
 #endif // CLAWR_RUNTIME_H
