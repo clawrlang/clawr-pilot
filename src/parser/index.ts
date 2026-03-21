@@ -20,8 +20,7 @@ export function parseClawr(source: string, file: string): Program {
     skipTrivia(stream)
     while (stream.peek()) {
         statements.push(parseStatement(stream, file))
-        consumeStatementTerminator(stream)
-        skipTrivia(stream)
+        consumeStatementTerminator(stream, file)
     }
 
     return {
@@ -159,16 +158,22 @@ function parseCallExpression(
     }
 }
 
-function consumeStatementTerminator(stream: TokenStream) {
-    skipTrivia(stream)
-    const next = stream.peek({ skippingNewline: true })
+function consumeStatementTerminator(stream: TokenStream, file: string) {
+    const next = stream.peek()
     if (!next) return
 
-    if (next.kind === 'PUNCTUATION' && next.symbol === ';') {
-        stream.next({ skippingNewline: true })
+    if (next.kind === 'NEWLINE') {
+        skipTrivia(stream)
+        return
     }
 
-    skipTrivia(stream)
+    if (next.kind === 'PUNCTUATION' && next.symbol === ';') {
+        stream.next()
+        skipTrivia(stream)
+        return
+    }
+
+    throw parseError(file, next, 'Expected newline or ; between statements')
 }
 
 function skipTrivia(stream: TokenStream) {

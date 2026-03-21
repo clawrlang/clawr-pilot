@@ -3,65 +3,146 @@ import type {
     ConstDeclaration,
     Expression,
     ExpressionStatement,
-    IdentifierExpression,
     Program,
 } from '../ast'
+import {
+    emitC,
+    type CExpression,
+    type CStatement,
+    type CTranslationUnit,
+} from '../ir/c'
 
 export function generateC(program: Program): string {
-    const lines: string[] = []
+    return emitC(lowerToCIr(program))
+}
+
+function lowerToCIr(program: Program): CTranslationUnit {
+    const mainStatements: CStatement[] = []
     const locals: string[] = []
     let tempCounter = 0
 
-    lines.push('#include "runtime.h"')
-    lines.push('#include <stdio.h>')
-    lines.push('#include <stdlib.h>')
-    lines.push('')
-    lines.push('static Integer* clawr_int_from_i64(long long value) {')
-    lines.push('    Array* digits = Array¸new(1, sizeof(digit_t));')
-    lines.push('    ARRAY_ELEMENT_AT(0, digits, digit_t) = (digit_t)value;')
-    lines.push('    Integer* result = Integer¸withDigits(digits);')
-    lines.push('    releaseRC(digits);')
-    lines.push('    return result;')
-    lines.push('}')
-    lines.push('')
-    lines.push('int main() {')
-
     for (const statement of program.statements) {
-        emitStatement(
+        lowerStatement(
             statement,
-            lines,
+            mainStatements,
             locals,
             () => `__clawr_tmp${tempCounter++}`,
         )
     }
 
     for (const local of [...locals].reverse()) {
-        lines.push(`    releaseRC(${local});`)
+        mainStatements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
     }
 
-    lines.push('    return 0;')
-    lines.push('}')
+    mainStatements.push({
+        kind: 'CReturnStatement',
+        value: { kind: 'CIntegerLiteral', value: '0' },
+    })
 
-    return lines.join('\n') + '\n'
+    return {
+        kind: 'CTranslationUnit',
+        includes: ['"runtime.h"', '<stdio.h>', '<stdlib.h>'],
+        functions: [
+            {
+                kind: 'CFunction',
+                isStatic: true,
+                returnType: 'Integer*',
+                name: 'clawr_int_from_i64',
+                params: [{ type: 'long long', name: 'value' }],
+                statements: [
+                    {
+                        kind: 'CVariableDeclaration',
+                        type: 'Array*',
+                        name: 'digits',
+                        initializer: {
+                            kind: 'CCallExpression',
+                            callee: 'Array¸new',
+                            args: [
+                                { kind: 'CIntegerLiteral', value: '1' },
+                                {
+                                    kind: 'CSizeofExpression',
+                                    typeName: 'digit_t',
+                                },
+                            ],
+                        },
+                    },
+                    {
+                        kind: 'CAssignmentStatement',
+                        target: {
+                            kind: 'CRawExpression',
+                            code: 'ARRAY_ELEMENT_AT(0, digits, digit_t)',
+                        },
+                        value: {
+                            kind: 'CCastExpression',
+                            typeName: 'digit_t',
+                            expression: {
+                                kind: 'CIdentifier',
+                                name: 'value',
+                            },
+                        },
+                    },
+                    {
+                        kind: 'CVariableDeclaration',
+                        type: 'Integer*',
+                        name: 'result',
+                        initializer: {
+                            kind: 'CCallExpression',
+                            callee: 'Integer¸withDigits',
+                            args: [{ kind: 'CIdentifier', name: 'digits' }],
+                        },
+                    },
+                    {
+                        kind: 'CExpressionStatement',
+                        expression: {
+                            kind: 'CCallExpression',
+                            callee: 'releaseRC',
+                            args: [{ kind: 'CIdentifier', name: 'digits' }],
+                        },
+                    },
+                    {
+                        kind: 'CReturnStatement',
+                        value: {
+                            kind: 'CIdentifier',
+                            name: 'result',
+                        },
+                    },
+                ],
+            },
+            {
+                kind: 'CFunction',
+                returnType: 'int',
+                name: 'main',
+                params: [],
+                statements: mainStatements,
+            },
+        ],
+    }
 }
 
-function emitStatement(
+function lowerStatement(
     statement: Program['statements'][number],
-    lines: string[],
+    statements: CStatement[],
     locals: string[],
     nextTemp: () => string,
 ) {
     if (statement.kind === 'ConstDeclaration') {
-        emitConstDeclaration(statement, lines, locals)
+        lowerConstDeclaration(statement, statements, locals)
         return
     }
 
-    emitExpressionStatement(statement, lines, nextTemp)
+    lowerExpressionStatement(statement, statements, nextTemp)
 }
 
-function emitConstDeclaration(
+function lowerConstDeclaration(
     statement: ConstDeclaration,
-    lines: string[],
+    statements: CStatement[],
     locals: string[],
 ) {
     if (statement.initializer.kind !== 'IntegerLiteral') {
@@ -70,15 +151,27 @@ function emitConstDeclaration(
         )
     }
 
-    lines.push(
-        `    Integer* ${statement.identifier.name} = clawr_int_from_i64(${statement.initializer.value.toString()}LL);`,
-    )
+    statements.push({
+        kind: 'CVariableDeclaration',
+        type: 'Integer*',
+        name: statement.identifier.name,
+        initializer: {
+            kind: 'CCallExpression',
+            callee: 'clawr_int_from_i64',
+            args: [
+                {
+                    kind: 'CIntegerLiteral',
+                    value: `${statement.initializer.value.toString()}LL`,
+                },
+            ],
+        },
+    })
     locals.push(statement.identifier.name)
 }
 
-function emitExpressionStatement(
+function lowerExpressionStatement(
     statement: ExpressionStatement,
-    lines: string[],
+    statements: CStatement[],
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -88,12 +181,12 @@ function emitExpressionStatement(
         )
     }
 
-    emitPrintCall(expr, lines, nextTemp)
+    lowerPrintCall(expr, statements, nextTemp)
 }
 
-function emitPrintCall(
+function lowerPrintCall(
     call: CallExpression,
-    lines: string[],
+    statements: CStatement[],
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -104,18 +197,38 @@ function emitPrintCall(
         throw new Error('print(...) must have exactly one argument')
     }
 
-    const render = emitStringExpression(call.arguments[0], nextTemp)
-    lines.push(...render.lines)
-    lines.push(`    printf("%s\\n", ${render.value});`)
+    const render = lowerStringExpression(call.arguments[0], nextTemp)
+    statements.push(...render.setup)
+    statements.push({
+        kind: 'CExpressionStatement',
+        expression: {
+            kind: 'CCallExpression',
+            callee: 'printf',
+            args: [{ kind: 'CStringLiteral', value: '%s\n' }, render.value],
+        },
+    })
     if (render.freeAfterUse) {
-        lines.push(`    free((void*)${render.value});`)
+        statements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'free',
+                args: [
+                    {
+                        kind: 'CCastExpression',
+                        typeName: 'void*',
+                        expression: render.value,
+                    },
+                ],
+            },
+        })
     }
 }
 
-function emitStringExpression(
+function lowerStringExpression(
     expression: Expression,
     nextTemp: () => string,
-): { lines: string[]; value: string; freeAfterUse: boolean } {
+): { setup: CStatement[]; value: CExpression; freeAfterUse: boolean } {
     if (expression.kind === 'CallExpression') {
         if (
             expression.callee.kind === 'MemberExpression' &&
@@ -131,10 +244,19 @@ function emitStringExpression(
 
             const temp = nextTemp()
             return {
-                lines: [
-                    `    const char* ${temp} = Integer·toString(${object.name});`,
+                setup: [
+                    {
+                        kind: 'CVariableDeclaration',
+                        type: 'const char*',
+                        name: temp,
+                        initializer: {
+                            kind: 'CCallExpression',
+                            callee: 'Integer·toString',
+                            args: [{ kind: 'CIdentifier', name: object.name }],
+                        },
+                    },
                 ],
-                value: temp,
+                value: { kind: 'CIdentifier', name: temp },
                 freeAfterUse: true,
             }
         }
