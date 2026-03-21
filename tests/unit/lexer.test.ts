@@ -30,6 +30,10 @@ describe('it tokenizes', () => {
                 real: Decimal('1.234567890e123456'),
                 s: '1.234_567_890e123_456',
             },
+            'signed exponent': {
+                real: Decimal('2.5e+3'),
+                s: '2.5e+3',
+            },
         }
         for (const [name, { s, real }] of Object.entries(tests)) {
             test(name, () => {

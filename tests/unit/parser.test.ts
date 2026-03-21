@@ -93,4 +93,16 @@ describe('parser real literals', () => {
             },
         })
     })
+
+    it('parses negated real declaration with signed exponent', () => {
+        const program = parseClawr('const x = -2.5e+3', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'RealLiteral',
+                value: '-2.5e+3',
+            },
+        })
+    })
 })

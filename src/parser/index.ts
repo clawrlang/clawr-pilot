@@ -131,6 +131,10 @@ export class Parser {
         const token = this.stream.next({ skippingNewline: true })
         if (!token) throw new Error('Unexpected EOF while parsing expression')
 
+        if (token.kind === 'OPERATOR' && token.operator === '-') {
+            return this.parseNegatedPrimary(token)
+        }
+
         if (token.kind === 'IDENTIFIER') {
             return {
                 kind: 'Identifier',
@@ -148,7 +152,7 @@ export class Parser {
         if (token.kind === 'REAL_LITERAL') {
             return {
                 kind: 'RealLiteral',
-                value: token.value.toString(),
+                value: token.source,
             } satisfies RealLiteralExpression
         }
 
@@ -163,6 +167,31 @@ export class Parser {
             this.file,
             token,
             `Unexpected token ${token.kind} in expression`,
+        )
+    }
+
+    parseNegatedPrimary(operator: Token): Expression {
+        const value = this.stream.next({ skippingNewline: true })
+        if (!value) throw new Error('Unexpected EOF after unary -')
+
+        if (value.kind === 'INTEGER_LITERAL') {
+            return {
+                kind: 'IntegerLiteral',
+                value: -value.value,
+            } satisfies IntegerLiteralExpression
+        }
+
+        if (value.kind === 'REAL_LITERAL') {
+            return {
+                kind: 'RealLiteral',
+                value: `-${value.source}`,
+            } satisfies RealLiteralExpression
+        }
+
+        throw parseError(
+            this.file,
+            operator,
+            'Unary - is currently supported only for numeric literals',
         )
     }
 

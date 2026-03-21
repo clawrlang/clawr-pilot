@@ -120,6 +120,15 @@ export class TokenStream {
             return this.consumeRegexLiteral()
         if (this.source.peek(1) == '\n') return this.collapsedNewlineToken()
 
+        const number = this.peekNumericLiteral()
+        if (number) {
+            const loc = { ...this.source.location }
+            this.source.skip(number.length)
+            const token = asToken(number, loc)
+            if (token && token.kind != 'NEWLINE') this.previousToken = token
+            return token
+        }
+
         if (punctuationChars.has(this.source.peek(1)))
             return this.readPunctuation()
 
@@ -137,6 +146,17 @@ export class TokenStream {
             if (token && token.kind != 'NEWLINE') this.previousToken = token
             return token
         }
+    }
+
+    private peekNumericLiteral(): string | null {
+        const match = this.source.peekMatch(
+            /(?:\d[\d_]*(?:\.\d[\d_]*)?|\.\d[\d_]*)(?:[eE][+-]?\d[\d_]*)?/,
+        )
+
+        if (!match || match.index !== this.source.location.index) return null
+        const trailing = this.source.peek(match[0].length + 1)[match[0].length]
+        if (trailing && /[A-Za-z_]/.test(trailing)) return null
+        return match[0]
     }
 
     private isRegexPosition(): boolean {
@@ -276,7 +296,7 @@ class Source {
         )
     }
 
-    peekMatch(regex: RegExp): string[] | null {
+    peekMatch(regex: RegExp): RegExpExecArray | null {
         return new BetterRegex(regex).exec(this.source, this.location.index)
     }
 
@@ -348,7 +368,7 @@ class BetterRegex {
         this.wrapped = wrapped
     }
 
-    exec(source: string, index: number) {
+    exec(source: string, index: number): RegExpExecArray | null {
         const re = new RegExp(this.wrapped, 'g')
         re.lastIndex = index
         return re.exec(source)
@@ -399,6 +419,7 @@ function asToken(next: string, loc: SourceLocation): Token | undefined {
         return {
             kind: 'REAL_LITERAL',
             value: real,
+            source: next.replaceAll('_', ''),
             line,
             column,
         }

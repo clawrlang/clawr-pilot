@@ -37,6 +37,7 @@ export interface IdentifierToken extends TokenData {
 export interface RealLiteralToken extends TokenData {
     kind: 'REAL_LITERAL'
     value: decimal.Decimal
+    source: string
 }
 export interface TruthValueLiteralToken extends TokenData {
     kind: 'TRUTH_LITERAL'
