@@ -4,7 +4,7 @@ import child_process from 'node:child_process'
 import { describe, expect, test } from 'bun:test'
 import { glob } from 'fast-glob'
 
-const CASES_DIR = path.join(__dirname, 'cases')
+const CASES_DIR = path.join(__dirname, 'c-cases')
 const OUTPUT_DIR = path.join(__dirname, 'out')
 const RUNTIME_DIR = path.join(__dirname, '../../src/runtime')
 

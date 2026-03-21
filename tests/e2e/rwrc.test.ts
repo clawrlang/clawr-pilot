@@ -3,7 +3,7 @@ import path from 'path'
 import child_process from 'node:child_process'
 import { describe, expect, it, test } from 'bun:test'
 
-const CASES_DIR = path.join(__dirname, 'cases')
+const CASES_DIR = path.join(__dirname, 'clawr-cases')
 const OUTPUT_DIR = path.join(__dirname, 'out')
 
 describe('End-to-end Tests', () => {
