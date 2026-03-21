@@ -15,189 +15,201 @@ import type {
 } from '../ast'
 
 export function parseClawr(source: string, file: string): Program {
-    const stream = new TokenStream(source, file)
-    const statements: Statement[] = []
-
-    skipTrivia(stream)
-    while (stream.peek()) {
-        statements.push(parseStatement(stream, file))
-        consumeStatementTerminator(stream, file)
-    }
-
-    return {
-        kind: 'Program',
-        statements,
-    }
+    const parser = new Parser(source, file)
+    return parser.parseProgram()
 }
 
-function parseStatement(stream: TokenStream, file: string): Statement {
-    const token = stream.peek({ skippingNewline: true })
-    if (!token) throw new Error('Unexpected EOF')
+export class Parser {
+    private stream: TokenStream
+    private file: string
 
-    if (
-        token.kind === 'KEYWORD' &&
-        (token.keyword === 'const' ||
-            token.keyword === 'mut' ||
-            token.keyword === 'ref')
-    ) {
-        return parseVariableDeclaration(stream, file)
+    constructor(source: string, file: string) {
+        this.stream = new TokenStream(source, file)
+        this.file = file
     }
 
-    return parseExpressionStatement(stream, file)
-}
+    parseProgram(): Program {
+        const statements: Statement[] = []
 
-function parseVariableDeclaration(
-    stream: TokenStream,
-    file: string,
-): VariableDeclaration {
-    const token = stream.peek({ skippingNewline: true })
-    if (
-        !token ||
-        token.kind !== 'KEYWORD' ||
-        (token.keyword !== 'const' &&
-            token.keyword !== 'mut' &&
-            token.keyword !== 'ref')
-    ) {
-        throw new Error('Expected const, mut, or ref keyword')
-    }
-
-    const semantics = token.keyword as VariableSemantics
-    stream.next({ skippingNewline: true })
-
-    const ident = stream.expect('IDENTIFIER')
-    stream.expect('PUNCTUATION', '=')
-    const initializer = parseExpression(stream, file)
-
-    return {
-        kind: 'VariableDeclaration',
-        semantics,
-        identifier: {
-            kind: 'Identifier',
-            name: ident.identifier,
-        },
-        initializer,
-    }
-}
-
-function parseExpressionStatement(
-    stream: TokenStream,
-    file: string,
-): ExpressionStatement {
-    return {
-        kind: 'ExpressionStatement',
-        expression: parseExpression(stream, file),
-    }
-}
-
-function parseExpression(stream: TokenStream, file: string): Expression {
-    let expr = parsePrimary(stream, file)
-
-    while (true) {
-        const token = stream.peek({ skippingNewline: true })
-        if (!token) return expr
-
-        if (token.kind === 'OPERATOR' && token.operator === '.') {
-            stream.next({ skippingNewline: true })
-            const prop = stream.expect('IDENTIFIER')
-            expr = {
-                kind: 'MemberExpression',
-                object: expr,
-                property: prop.identifier,
-            } satisfies MemberExpression
-            continue
+        this.skipTrivia()
+        while (this.stream.peek()) {
+            statements.push(this.parseStatement())
+            this.consumeStatementTerminator()
         }
 
-        if (token.kind === 'PUNCTUATION' && token.symbol === '(') {
-            expr = parseCallExpression(stream, file, expr)
-            continue
+        return {
+            kind: 'Program',
+            statements,
+        }
+    }
+
+    parseStatement(): Statement {
+        const token = this.stream.peek({ skippingNewline: true })
+        if (!token) throw new Error('Unexpected EOF')
+
+        if (
+            token.kind === 'KEYWORD' &&
+            (token.keyword === 'const' ||
+                token.keyword === 'mut' ||
+                token.keyword === 'ref')
+        ) {
+            return this.parseVariableDeclaration()
         }
 
-        return expr
+        return this.parseExpressionStatement()
     }
-}
 
-function parsePrimary(stream: TokenStream, file: string): Expression {
-    const token = stream.next({ skippingNewline: true })
-    if (!token) throw new Error('Unexpected EOF while parsing expression')
+    parseVariableDeclaration(): VariableDeclaration {
+        const token = this.stream.peek({ skippingNewline: true })
+        if (
+            !token ||
+            token.kind !== 'KEYWORD' ||
+            (token.keyword !== 'const' &&
+                token.keyword !== 'mut' &&
+                token.keyword !== 'ref')
+        ) {
+            throw new Error('Expected const, mut, or ref keyword')
+        }
 
-    if (token.kind === 'IDENTIFIER') {
+        const semantics = token.keyword as VariableSemantics
+        this.stream.next({ skippingNewline: true })
+
+        const ident = this.stream.expect('IDENTIFIER')
+        this.stream.expect('PUNCTUATION', '=')
+        const initializer = this.parseExpression()
+
         return {
-            kind: 'Identifier',
-            name: token.identifier,
-        } satisfies IdentifierExpression
+            kind: 'VariableDeclaration',
+            semantics,
+            identifier: {
+                kind: 'Identifier',
+                name: ident.identifier,
+            },
+            initializer,
+        }
     }
 
-    if (token.kind === 'INTEGER_LITERAL') {
+    parseExpressionStatement(): ExpressionStatement {
         return {
-            kind: 'IntegerLiteral',
-            value: token.value,
-        } satisfies IntegerLiteralExpression
+            kind: 'ExpressionStatement',
+            expression: this.parseExpression(),
+        }
     }
 
-    throw parseError(
-        file,
-        token,
-        `Unexpected token ${token.kind} in expression`,
-    )
-}
+    parseExpression(): Expression {
+        let expr = this.parsePrimary()
 
-function parseCallExpression(
-    stream: TokenStream,
-    file: string,
-    callee: Expression,
-): CallExpression {
-    stream.expect('PUNCTUATION', '(')
-    const args: Expression[] = []
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (!token) return expr
 
-    let next = stream.peek({ skippingNewline: true })
-    if (!next) throw new Error('Unexpected EOF in call expression')
+            if (token.kind === 'OPERATOR' && token.operator === '.') {
+                this.stream.next({ skippingNewline: true })
+                const prop = this.stream.expect('IDENTIFIER')
+                expr = {
+                    kind: 'MemberExpression',
+                    object: expr,
+                    property: prop.identifier,
+                } satisfies MemberExpression
+                continue
+            }
 
-    while (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
-        args.push(parseExpression(stream, file))
-        next = stream.peek({ skippingNewline: true })
+            if (token.kind === 'PUNCTUATION' && token.symbol === '(') {
+                expr = this.parseCallExpression(expr)
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parsePrimary(): Expression {
+        const token = this.stream.next({ skippingNewline: true })
+        if (!token) throw new Error('Unexpected EOF while parsing expression')
+
+        if (token.kind === 'IDENTIFIER') {
+            return {
+                kind: 'Identifier',
+                name: token.identifier,
+            } satisfies IdentifierExpression
+        }
+
+        if (token.kind === 'INTEGER_LITERAL') {
+            return {
+                kind: 'IntegerLiteral',
+                value: token.value,
+            } satisfies IntegerLiteralExpression
+        }
+
+        throw parseError(
+            this.file,
+            token,
+            `Unexpected token ${token.kind} in expression`,
+        )
+    }
+
+    parseCallExpression(callee: Expression): CallExpression {
+        this.stream.expect('PUNCTUATION', '(')
+        const args: Expression[] = []
+
+        let next = this.stream.peek({ skippingNewline: true })
         if (!next) throw new Error('Unexpected EOF in call expression')
 
-        if (next.kind === 'PUNCTUATION' && next.symbol === ',') {
-            stream.next({ skippingNewline: true })
-            next = stream.peek({ skippingNewline: true })
+        while (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
+            args.push(this.parseExpression())
+            next = this.stream.peek({ skippingNewline: true })
             if (!next) throw new Error('Unexpected EOF in call expression')
-            continue
+
+            if (next.kind === 'PUNCTUATION' && next.symbol === ',') {
+                this.stream.next({ skippingNewline: true })
+                next = this.stream.peek({ skippingNewline: true })
+                if (!next) throw new Error('Unexpected EOF in call expression')
+                continue
+            }
+
+            if (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
+                throw parseError(
+                    this.file,
+                    next,
+                    'Expected , or ) in argument list',
+                )
+            }
         }
 
-        if (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
-            throw parseError(file, next, 'Expected , or ) in argument list')
+        this.stream.expect('PUNCTUATION', ')')
+
+        return {
+            kind: 'CallExpression',
+            callee,
+            arguments: args,
         }
     }
 
-    stream.expect('PUNCTUATION', ')')
+    consumeStatementTerminator() {
+        const next = this.stream.peek()
+        if (!next) return
 
-    return {
-        kind: 'CallExpression',
-        callee,
-        arguments: args,
-    }
-}
+        if (next.kind === 'NEWLINE') {
+            this.skipTrivia()
+            return
+        }
 
-function consumeStatementTerminator(stream: TokenStream, file: string) {
-    const next = stream.peek()
-    if (!next) return
+        if (next.kind === 'PUNCTUATION' && next.symbol === ';') {
+            this.stream.next()
+            this.skipTrivia()
+            return
+        }
 
-    if (next.kind === 'NEWLINE') {
-        skipTrivia(stream)
-        return
-    }
-
-    if (next.kind === 'PUNCTUATION' && next.symbol === ';') {
-        stream.next()
-        skipTrivia(stream)
-        return
+        throw parseError(
+            this.file,
+            next,
+            'Expected newline or ; between statements',
+        )
     }
 
-    throw parseError(file, next, 'Expected newline or ; between statements')
-}
-
-function skipTrivia(stream: TokenStream) {
-    while (stream.peek()?.kind === 'NEWLINE') stream.next()
+    skipTrivia() {
+        while (this.stream.peek()?.kind === 'NEWLINE') this.stream.next()
+    }
 }
 
 function parseError(file: string, token: Token, message: string): Error {
