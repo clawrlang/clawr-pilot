@@ -60,6 +60,22 @@ describe('parser variable declaration semantics', () => {
     }
 })
 
+describe('parser unicode identifiers', () => {
+    it('parses declarations with unicode identifiers', () => {
+        const program = parseClawr('const 变量 = 42', 'test')
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            semantics: 'const',
+            identifier: {
+                kind: 'Identifier',
+                name: '变量',
+            },
+        })
+    })
+})
+
 describe('parser truthvalue literals', () => {
     it('parses truthvalue declaration and print expression', () => {
         const program = parseClawr(

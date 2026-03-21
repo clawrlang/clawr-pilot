@@ -115,10 +115,23 @@ export class TokenStream {
         this.skipIgnoredCharacters(options?.skippingNewline ?? false)
         if (!this.source.hasMoreCharacters()) return
 
-        if (this.source.peek(1) == '"') return this.consumeStringLiteral()
-        if (this.source.peek(1) == '/' && this.isRegexPosition())
+        const current = this.source.peek(1)
+        if (isReservedImplementationGlyph(current)) {
+            const { line, column } = this.source.location
+            throw positionedError(
+                `Reserved implementation glyph '${current}' is not allowed in Clawr identifiers`,
+                {
+                    file: this.file,
+                    line,
+                    column,
+                },
+            )
+        }
+
+        if (current == '"') return this.consumeStringLiteral()
+        if (current == '/' && this.isRegexPosition())
             return this.consumeRegexLiteral()
-        if (this.source.peek(1) == '\n') return this.collapsedNewlineToken()
+        if (current == '\n') return this.collapsedNewlineToken()
 
         const number = this.peekNumericLiteral()
         if (number) {
@@ -131,6 +144,15 @@ export class TokenStream {
 
         if (punctuationChars.has(this.source.peek(1)))
             return this.readPunctuation()
+
+        const identifier = this.readIdentifier()
+        if (identifier) {
+            const loc = { ...this.source.location }
+            this.source.skip(identifier.length)
+            const token = asToken(identifier, loc)
+            if (token && token.kind != 'NEWLINE') this.previousToken = token
+            return token
+        }
 
         const loc = { ...this.source.location }
         const next = this.source.peekUntil(/[^\w.]/)
@@ -146,6 +168,58 @@ export class TokenStream {
             if (token && token.kind != 'NEWLINE') this.previousToken = token
             return token
         }
+    }
+
+    private readIdentifier(): string | null {
+        const source = this.source.source
+        let index = this.source.location.index
+        if (index >= source.length) return null
+
+        const firstCodePoint = source.codePointAt(index)
+        if (firstCodePoint === undefined) return null
+
+        const first = String.fromCodePoint(firstCodePoint)
+        if (!isIdentifierStart(first)) return null
+
+        index += first.length
+        while (index < source.length) {
+            const codePoint = source.codePointAt(index)
+            if (codePoint === undefined) break
+            const char = String.fromCodePoint(codePoint)
+
+            if (isReservedImplementationGlyph(char)) {
+                const offset = source.slice(this.source.location.index, index)
+                const line = this.source.location.line
+                const column = this.source.location.column + [...offset].length
+                throw positionedError(
+                    `Reserved implementation glyph '${char}' is not allowed in Clawr identifiers`,
+                    {
+                        file: this.file,
+                        line,
+                        column,
+                    },
+                )
+            }
+
+            if (isForbiddenUnicodeCodePoint(char)) {
+                const offset = source.slice(this.source.location.index, index)
+                const line = this.source.location.line
+                const column = this.source.location.column + [...offset].length
+                throw positionedError(
+                    `Forbidden Unicode character '${char}' in identifier`,
+                    {
+                        file: this.file,
+                        line,
+                        column,
+                    },
+                )
+            }
+
+            if (!isIdentifierContinue(char)) break
+            index += char.length
+        }
+
+        return source.slice(this.source.location.index, index)
     }
 
     private peekNumericLiteral(): string | null {
@@ -270,6 +344,25 @@ export class TokenStream {
     }
 }
 
+function isReservedImplementationGlyph(char: string): boolean {
+    return char === '·' || char === '¸' || char === 'ˇ' || char === '˛'
+}
+
+function isIdentifierStart(char: string): boolean {
+    return char === '_' || /\p{XID_Start}/u.test(char)
+}
+
+function isIdentifierContinue(char: string): boolean {
+    return char === '_' || /\p{XID_Continue}/u.test(char)
+}
+
+function isForbiddenUnicodeCodePoint(char: string): boolean {
+    return (
+        (/\p{Cc}/u.test(char) && !/\s/u.test(char)) ||
+        /[\p{Cf}\p{Cs}\p{Co}\p{Cn}]/u.test(char)
+    )
+}
+
 class Source {
     location: SourceLocation
     source: string
@@ -378,29 +471,31 @@ class BetterRegex {
 function asToken(next: string, loc: SourceLocation): Token | undefined {
     if (!next) return
 
+    const normalized = next.normalize('NFC')
+
     const { line, column } = loc
-    if (keywords.has(next)) {
+    if (keywords.has(normalized)) {
         return {
             kind: 'KEYWORD',
-            keyword: next as Keyword,
+            keyword: normalized as Keyword,
             line,
             column,
         }
     }
-    if (truthValues.has(next)) {
+    if (truthValues.has(normalized)) {
         return {
             kind: 'TRUTH_LITERAL',
-            value: next as TruthLiteral,
+            value: normalized as TruthLiteral,
             line,
             column,
         }
     }
 
     // Treat standalone or underscore-only sequences as identifiers, not numbers.
-    if (/^_+$/.test(next)) {
+    if (/^_+$/.test(normalized)) {
         return {
             kind: 'IDENTIFIER',
-            identifier: next,
+            identifier: normalized,
             line,
             column,
         }
@@ -426,7 +521,7 @@ function asToken(next: string, loc: SourceLocation): Token | undefined {
     } catch {}
     return {
         kind: 'IDENTIFIER',
-        identifier: next,
+        identifier: normalized,
         line,
         column,
     }

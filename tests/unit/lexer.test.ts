@@ -220,6 +220,25 @@ describe('it tokenizes', () => {
                 })
             })
         }
+
+        test('allows unicode script identifiers', () => {
+            const tokens = [...tokenize('变量')]
+            expect(tokens.length).toBe(1)
+            expect(tokens[0]).toMatchObject({
+                kind: 'IDENTIFIER',
+                identifier: '变量',
+            })
+        })
+
+        test('normalizes identifiers to NFC', () => {
+            const decomposed = 'e\u0301'
+            const tokens = [...tokenize(decomposed)]
+            expect(tokens.length).toBe(1)
+            expect(tokens[0]).toMatchObject({
+                kind: 'IDENTIFIER',
+                identifier: 'é',
+            })
+        })
     })
 
     it('dot operator', () => {
@@ -313,6 +332,28 @@ describe('it ignores', () => {
             line: 1,
             column: 2,
         })
+    })
+})
+
+describe('reserved implementation glyphs', () => {
+    for (const glyph of ['·', '¸', 'ˇ', '˛']) {
+        test(`rejects ${glyph}`, () => {
+            expect(() => [...tokenize(`x${glyph}y`)]).toThrowError(
+                /Reserved implementation glyph/,
+            )
+        })
+    }
+
+    test('includes source position', () => {
+        expect(() => [...tokenize('abc·def')]).toThrowError(/test:1:4:/)
+    })
+})
+
+describe('forbidden unicode identifier code points', () => {
+    test('rejects zero-width non-joiner in identifier', () => {
+        expect(() => [...tokenize('ab\u200Ccd')]).toThrowError(
+            /Forbidden Unicode character/,
+        )
     })
 })
 
