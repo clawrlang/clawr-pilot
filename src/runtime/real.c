@@ -2,6 +2,7 @@
 #include "panic.h"
 
 #include <errno.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -98,4 +99,17 @@ Real* Real·add(Real* left, Real* right) {
 
 Real* Real·subtract(Real* left, Real* right) {
     return createFromLongDouble(left->value - right->value);
+}
+
+Real* Real·multiply(Real* left, Real* right) {
+    return createFromLongDouble(left->value * right->value);
+}
+
+Real* Real·divide(Real* left, Real* right) {
+    if (right->value == 0.0L) panic("Division by zero!");
+    return createFromLongDouble(left->value / right->value);
+}
+
+Real* Real·power(Real* left, Real* right) {
+    return createFromLongDouble(powl(left->value, right->value));
 }

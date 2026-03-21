@@ -178,6 +178,29 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (isIntegerExpression(statement.initializer, variableKinds)) {
+        const lowered = lowerIntegerExpression(
+            statement.initializer,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        const detachedHeapTemps = detachOwnedValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'Integer*',
+            name: statement.identifier.name,
+            initializer: lowered.value,
+        })
+        heapLocals.push(...detachedHeapTemps)
+        heapLocals.push(statement.identifier.name)
+        variableKinds.set(statement.identifier.name, 'integer')
+        return
+    }
+
     if (statement.initializer.kind === 'TruthLiteral') {
         statements.push({
             kind: 'CVariableDeclaration',
@@ -383,6 +406,110 @@ function lowerStringExpression(
     )
 }
 
+function isIntegerExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+): boolean {
+    switch (expression.kind) {
+        case 'IntegerLiteral':
+            return true
+        case 'Identifier':
+            return variableKinds.get(expression.name) === 'integer'
+        case 'BinaryExpression':
+            return (
+                isIntegerExpression(expression.left, variableKinds) &&
+                isIntegerExpression(expression.right, variableKinds)
+            )
+        default:
+            return false
+    }
+}
+
+function lowerIntegerExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
+    if (expression.kind === 'IntegerLiteral') {
+        const temp = nextTemp()
+        return {
+            setup: [
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'Integer*',
+                    name: temp,
+                    initializer: {
+                        kind: 'CCallExpression',
+                        callee: 'clawr_int_from_i64',
+                        args: [
+                            {
+                                kind: 'CIntegerLiteral',
+                                value: `${expression.value.toString()}LL`,
+                            },
+                        ],
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+            heapTemps: [temp],
+        }
+    }
+
+    if (
+        expression.kind === 'Identifier' &&
+        variableKinds.get(expression.name) === 'integer'
+    ) {
+        return {
+            setup: [],
+            value: { kind: 'CIdentifier', name: expression.name },
+            heapTemps: [],
+        }
+    }
+
+    if (expression.kind === 'BinaryExpression') {
+        return lowerIntegerBinaryExpression(expression, variableKinds, nextTemp)
+    }
+
+    throw new Error('Unsupported integer expression in this vertical slice')
+}
+
+function lowerIntegerBinaryExpression(
+    expression: BinaryExpression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
+    const left = lowerIntegerExpression(expression.left, variableKinds, nextTemp)
+    const right = lowerIntegerExpression(expression.right, variableKinds, nextTemp)
+    const calleeMap: Record<string, string> = {
+        '+': 'Integer·add',
+        '-': 'Integer·subtract',
+        '*': 'Integer·multiply',
+        '/': 'Integer·divideIntegers',
+        '^': 'Integer·power',
+    }
+    const callee = calleeMap[expression.operator]
+    const temp = nextTemp()
+
+    return {
+        setup: [
+            ...left.setup,
+            ...right.setup,
+            {
+                kind: 'CVariableDeclaration',
+                type: 'Integer*',
+                name: temp,
+                initializer: {
+                    kind: 'CCallExpression',
+                    callee,
+                    args: [left.value, right.value],
+                },
+            },
+        ],
+        value: { kind: 'CIdentifier', name: temp },
+        heapTemps: [...left.heapTemps, ...right.heapTemps, temp],
+    }
+}
+
 function isRealExpression(
     expression: Expression,
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
@@ -394,7 +521,6 @@ function isRealExpression(
             return variableKinds.get(expression.name) === 'real'
         case 'BinaryExpression':
             return (
-                (expression.operator === '+' || expression.operator === '-') &&
                 isRealExpression(expression.left, variableKinds) &&
                 isRealExpression(expression.right, variableKinds)
             )
@@ -455,7 +581,14 @@ function lowerRealBinaryExpression(
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
     const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
     const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
-    const callee = expression.operator === '+' ? 'Real·add' : 'Real·subtract'
+    const calleeMap: Record<string, string> = {
+        '+': 'Real·add',
+        '-': 'Real·subtract',
+        '*': 'Real·multiply',
+        '/': 'Real·divide',
+        '^': 'Real·power',
+    }
+    const callee = calleeMap[expression.operator]
     const temp = nextTemp()
 
     return {

@@ -1,0 +1,6 @@
+const a = 2.5
+const b = 4.0
+const c = a * b
+const d = c / 2.5
+print(c.toString())
+print(d.toString())

@@ -102,7 +102,7 @@ export class Parser {
     }
 
     parseExpression(): Expression {
-        let expr = this.parsePostfixExpression()
+        let expr = this.parseMultiplicativeExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
@@ -112,7 +112,7 @@ export class Parser {
                 (token.operator === '+' || token.operator === '-')
             ) {
                 this.stream.next({ skippingNewline: true })
-                const right = this.parsePostfixExpression()
+                const right = this.parseMultiplicativeExpression()
                 expr = {
                     kind: 'BinaryExpression',
                     operator: token.operator,
@@ -124,6 +124,50 @@ export class Parser {
 
             return expr
         }
+    }
+
+    parseMultiplicativeExpression(): Expression {
+        let expr = this.parseExponentiationExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (
+                token &&
+                token.kind === 'OPERATOR' &&
+                (token.operator === '*' || token.operator === '/')
+            ) {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseExponentiationExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: token.operator,
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseExponentiationExpression(): Expression {
+        const base = this.parsePostfixExpression()
+
+        const token = this.stream.peek({ skippingNewline: true })
+        if (token && token.kind === 'OPERATOR' && token.operator === '^') {
+            this.stream.next({ skippingNewline: true })
+            // Right-associative: recurse here instead of looping
+            const exponent = this.parseExponentiationExpression()
+            return {
+                kind: 'BinaryExpression',
+                operator: '^',
+                left: base,
+                right: exponent,
+            } satisfies BinaryExpression
+        }
+
+        return base
     }
 
     parsePostfixExpression(): Expression {

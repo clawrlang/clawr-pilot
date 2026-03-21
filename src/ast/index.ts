@@ -50,7 +50,7 @@ export interface TruthLiteralExpression {
 
 export interface BinaryExpression {
     kind: 'BinaryExpression'
-    operator: '+' | '-'
+    operator: '+' | '-' | '*' | '/' | '^'
     left: Expression
     right: Expression
 }

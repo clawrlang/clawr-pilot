@@ -320,3 +320,173 @@ digit_t Integer·divide(Integer* self, digit_t divisor) {
     }
     return (digit_t)remainder;
 };
+
+// ---------------------------------------------------------------------------
+// Static helpers for new arithmetic operations
+// ---------------------------------------------------------------------------
+
+static size_t effectiveLength(Integer* self) {
+    size_t n = self->digits->count;
+    while (n > 0 && ARRAY_ELEMENT_AT(n - 1, self->digits, digit_t) == 0)
+        n--;
+    return n;
+}
+
+static int8_t integerSign(Integer* self) {
+    for (size_t i = self->digits->count; i-- > 0; ) {
+        digit_t d = ARRAY_ELEMENT_AT(i, self->digits, digit_t);
+        if (d > 0) return 1;
+        if (d < 0) return -1;
+    }
+    return 0;
+}
+
+static Integer* copyInteger(Integer* src) {
+    Integer* copy = allocRC(Integer, __rc_ISOLATED);
+    size_t n = src->digits->count;
+    copy->digits = Array¸new(n, sizeof(digit_t));   // zero-initialised by Array¸new
+    for (size_t i = 0; i < n; i++)
+        ARRAY_ELEMENT_AT(i, copy->digits, digit_t) = ARRAY_ELEMENT_AT(i, src->digits, digit_t);
+    return copy;
+}
+
+static Integer* zeroOfSize(size_t count) {
+    Integer* result = allocRC(Integer, __rc_ISOLATED);
+    result->digits = Array¸new(count, sizeof(digit_t));  // zero-initialised
+    return result;
+}
+
+static void trimLeadingZeros(Integer* self) {
+    size_t n = self->digits->count;
+    while (n > 0 && ARRAY_ELEMENT_AT(n - 1, self->digits, digit_t) == 0)
+        n--;
+    if (n == self->digits->count) return;
+    if (n == 0) {
+        releaseRC(self->digits);
+        self->digits = retainRC(&Array¸empty);
+        return;
+    }
+    Array* trimmed = Array¸new(n, sizeof(digit_t));
+    for (size_t i = 0; i < n; i++)
+        ARRAY_ELEMENT_AT(i, trimmed, digit_t) = ARRAY_ELEMENT_AT(i, self->digits, digit_t);
+    releaseRC(self->digits);
+    self->digits = trimmed;
+}
+
+/// In-place balanced decompose of a 128-bit value into a digit and carry.
+/// After the call: value == *carry_out * BASE + *digit_out,
+/// with |*digit_out| <= DIGIT_MAX.
+static void balancedDecompose(__int128_t value, digit_t* digit_out, __int128_t* carry_out) {
+    static const __int128_t BASE_128 = ((__int128_t)1 << 64) - 1;
+    __int128_t q = value / BASE_128;
+    __int128_t r = value - q * BASE_128;
+    if (r > (digit_t)DIGIT_MAX) { r -= BASE_128; q++; }
+    else if (r < -(digit_t)DIGIT_MAX) { r += BASE_128; q--; }
+    *digit_out = (digit_t)r;
+    *carry_out = q;
+}
+
+// ---------------------------------------------------------------------------
+// Non-mutating binary operations
+// ---------------------------------------------------------------------------
+
+Integer* Integer·add(Integer* left, Integer* right) {
+    Integer* result = copyInteger(left);
+    Integer·increment(result, right);
+    trimLeadingZeros(result);
+    return result;
+}
+
+Integer* Integer·subtract(Integer* left, Integer* right) {
+    Integer* result = copyInteger(left);
+    Integer·decrement(result, right);
+    trimLeadingZeros(result);
+    return result;
+}
+
+Integer* Integer·multiply(Integer* left, Integer* right) {
+    size_t n = effectiveLength(left);
+    size_t m = effectiveLength(right);
+    if (n == 0 || m == 0) return retainRC(&Integer¸zero);
+
+    Integer* result = zeroOfSize(n + m);
+
+    for (size_t i = 0; i < n; i++) {
+        digit_t a = ARRAY_ELEMENT_AT(i, left->digits, digit_t);
+        if (a == 0) continue;
+
+        __int128_t carry = 0;
+        for (size_t j = 0; j < m; j++) {
+            digit_t b   = ARRAY_ELEMENT_AT(j, right->digits, digit_t);
+            digit_t cur = ARRAY_ELEMENT_AT(i + j, result->digits, digit_t);
+            __int128_t prod = (__int128_t)a * b + cur + carry;
+            digit_t digit;
+            balancedDecompose(prod, &digit, &carry);
+            ARRAY_ELEMENT_AT(i + j, result->digits, digit_t) = digit;
+        }
+
+        // Propagate any remaining carry into the higher positions.
+        for (size_t k = i + m; carry != 0 && k < n + m; k++) {
+            __int128_t sum = (__int128_t)ARRAY_ELEMENT_AT(k, result->digits, digit_t) + carry;
+            digit_t digit;
+            balancedDecompose(sum, &digit, &carry);
+            ARRAY_ELEMENT_AT(k, result->digits, digit_t) = digit;
+        }
+    }
+
+    trimLeadingZeros(result);
+    return result;
+}
+
+Integer* Integer·divideIntegers(Integer* dividend, Integer* divisor) {
+    size_t m = effectiveLength(divisor);
+    if (m == 0) panic("Division by zero!");
+    if (effectiveLength(dividend) == 0) return retainRC(&Integer¸zero);
+
+    if (m > 1) {
+        panic("Integer division by values whose magnitude exceeds a single digit "
+              "(> 9223372036854775807) is not yet implemented");
+    }
+
+    digit_t d = ARRAY_ELEMENT_AT(0, divisor->digits, digit_t);
+    Integer* result = copyInteger(dividend);
+    Integer·divide(result, d);
+    trimLeadingZeros(result);
+    return result;
+}
+
+Integer* Integer·power(Integer* base, Integer* exponent) {
+    if (integerSign(exponent) < 0)
+        panic("Integer exponentiation requires a non-negative exponent");
+
+    // result = 1
+    Integer* result = zeroOfSize(1);
+    ARRAY_ELEMENT_AT(0, result->digits, digit_t) = 1;
+
+    if (effectiveLength(exponent) == 0)
+        return result;   // base^0 = 1
+
+    Integer* b       = copyInteger(base);
+    Integer* exp_rem = copyInteger(exponent);
+
+    while (effectiveLength(exp_rem) > 0) {
+        digit_t bit = Integer·divide(exp_rem, 2);
+        trimLeadingZeros(exp_rem);
+
+        if (bit != 0) {
+            Integer* new_result = Integer·multiply(result, b);
+            releaseRC(result);
+            result = new_result;
+        }
+
+        if (effectiveLength(exp_rem) > 0) {
+            Integer* new_b = Integer·multiply(b, b);
+            releaseRC(b);
+            b = new_b;
+        }
+    }
+
+    releaseRC(b);
+    releaseRC(exp_rem);
+    return result;
+}

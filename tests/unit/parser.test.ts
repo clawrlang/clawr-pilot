@@ -106,3 +106,92 @@ describe('parser real literals', () => {
         })
     })
 })
+
+describe('parser binary expressions', () => {
+    it('parses multiplication', () => {
+        const program = parseClawr('const c = a * b', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '*',
+                left: { kind: 'Identifier', name: 'a' },
+                right: { kind: 'Identifier', name: 'b' },
+            },
+        })
+    })
+
+    it('parses division', () => {
+        const program = parseClawr('const c = a / b', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '/',
+            },
+        })
+    })
+
+    it('parses exponentiation', () => {
+        const program = parseClawr('const c = a ^ b', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '^',
+            },
+        })
+    })
+
+    it('* binds tighter than +', () => {
+        const program = parseClawr('const c = a + b * d', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '+',
+                left: { kind: 'Identifier', name: 'a' },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '*',
+                    left: { kind: 'Identifier', name: 'b' },
+                    right: { kind: 'Identifier', name: 'd' },
+                },
+            },
+        })
+    })
+
+    it('^ binds tighter than *', () => {
+        const program = parseClawr('const c = a * b ^ d', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '*',
+                left: { kind: 'Identifier', name: 'a' },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '^',
+                },
+            },
+        })
+    })
+
+    it('^ is right-associative', () => {
+        const program = parseClawr('const c = a ^ b ^ d', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '^',
+                left: { kind: 'Identifier', name: 'a' },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '^',
+                    left: { kind: 'Identifier', name: 'b' },
+                    right: { kind: 'Identifier', name: 'd' },
+                },
+            },
+        })
+    })
+})
