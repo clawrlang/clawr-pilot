@@ -1,7 +1,15 @@
 # TODO
 
-- `truthvalue` (`false`, `ambiguous`, `true`)
-- `real` (arbitrary precision)
+- `truthvalue` operators
+  - `&&`, `||`, `!`
+  - `adjust(a, towards: b)` + monadic versions
+  - `rotate(a, by: b)` + monadic versions (`rotateUp()` a.k.a. `rotate(by: true)` and `rotateDown()`)
+  - Runtime: Should false = -1, true = +1? Or false = 0b00, true = 0b11? 0b01 AND 0b10 could both be considered ambiguous.
+  - && = min
+  - || = max
+  - false < ambiguous < true
+  - `!ambiguous == ambiguous`
+- `real` (current: `long double` runtime bootstrap, needs arbitrary-precision backend)
 - `string`
 - Lattices: Replace types with value-sets
   - enumerated (one or more distinct values)
@@ -16,13 +24,30 @@
   - `data` is a naked data structure — no methods
   - `object` is encapsulated data — only accessed through methods
   - `service` is like `object` but not restricted to its own heap memory
+  - `enum` list of values (like `truthvalue`)
+  - tagged `union` types (labelled data structures, no tuples)
+    - `x.casename?.property`
 - Validation: primitive values cannot be assigned to `ref` variables
 - Validation: `service` type cannot be assigned to `const`/`mut` variables
 - `trait` applicable to data-oriented type (i.e. `data` and `object`)
 - `role` applicable to `service` (`ref` only)
+- Control flow
+  - only `true` selects, `ambiguous` is akin to `false` in predicates.
+  - Ternary operator with Python syntax: `a if x else b if !x else c`
+  - `if` `else if` `else`
+  - `unless (predicate) { return/continue/break }` (guard clause)
+  - `if const cn = nullable { /* cn is available (and not null) inside the block */ }`
+  - `unless const cn = x.casename { return } // cn exists (and is not null) after block`
+  - `for in` (no C-like `for` loop)
+  - `when`, `=>` pattern matching
+  - `when` as expression
+  - `while` and `until`
+  - Should `if` require parentheses (like Java/C) or braces (like Swift)?
 
 ## Clearly advanced (and maybe entirely out of scope)
 
 - Referential constraints such as `func add(a: integer, b: integer) -> integer @value(a+b)`
 - Staggered lattices `integer @range(1...10) \/ @range(55...100)` (where `\/` means union or join)
-- Optimise the AST code based on known value-sets
+- Optimise/prune the AST based on known value-sets
+- Add support for `bitfield` and `tritfield`.
+  - Or use different names like `[byte]`? But what is a `tryte`? It is 6 or 9 trits, or some other size altogether?
