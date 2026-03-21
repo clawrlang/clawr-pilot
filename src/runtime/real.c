@@ -29,6 +29,17 @@ static char* cloneString(const char* input) {
     return out;
 }
 
+static char* formatLongDouble(long double value) {
+    int length = snprintf(NULL, 0, "%.21Lg", value);
+    if (length < 0) panic("Failed to format real value");
+
+    char* out = malloc((size_t)length + 1);
+    if (!out) panic("Out of memory in Real formatter");
+
+    snprintf(out, (size_t)length + 1, "%.21Lg", value);
+    return out;
+}
+
 // Remove readability separators while preserving decimal/exponent semantics.
 static char* normalizeRealLiteral(const char* input) {
     size_t len = strlen(input);
@@ -63,4 +74,19 @@ Real* Real¸fromString(const char* value) {
 
 const char* Real·toString(Real* self) {
     return cloneString(self->canonical);
+}
+
+static Real* createFromLongDouble(long double value) {
+    Real* real = allocRC(Real, __rc_ISOLATED);
+    real->value = value;
+    real->canonical = formatLongDouble(value);
+    return real;
+}
+
+Real* Real·add(Real* left, Real* right) {
+    return createFromLongDouble(left->value + right->value);
+}
+
+Real* Real·subtract(Real* left, Real* right) {
+    return createFromLongDouble(left->value - right->value);
 }

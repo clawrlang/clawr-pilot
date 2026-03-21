@@ -2,6 +2,7 @@ import { TokenStream } from '../lexer'
 import type { Token } from '../lexer'
 import { positionedError } from '../lexer/positioned-error'
 import type {
+    BinaryExpression,
     CallExpression,
     Expression,
     ExpressionStatement,
@@ -101,6 +102,31 @@ export class Parser {
     }
 
     parseExpression(): Expression {
+        let expr = this.parsePostfixExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (
+                token &&
+                token.kind === 'OPERATOR' &&
+                (token.operator === '+' || token.operator === '-')
+            ) {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parsePostfixExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: token.operator,
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parsePostfixExpression(): Expression {
         let expr = this.parsePrimary()
 
         while (true) {

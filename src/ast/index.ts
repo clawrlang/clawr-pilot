@@ -24,6 +24,7 @@ export type Expression =
     | IntegerLiteralExpression
     | RealLiteralExpression
     | TruthLiteralExpression
+    | BinaryExpression
     | MemberExpression
     | CallExpression
 
@@ -45,6 +46,13 @@ export interface RealLiteralExpression {
 export interface TruthLiteralExpression {
     kind: 'TruthLiteral'
     value: 'false' | 'ambiguous' | 'true'
+}
+
+export interface BinaryExpression {
+    kind: 'BinaryExpression'
+    operator: '+' | '-'
+    left: Expression
+    right: Expression
 }
 
 export interface MemberExpression {

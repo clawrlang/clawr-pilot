@@ -1,4 +1,5 @@
 import type {
+    BinaryExpression,
     CallExpression,
     Expression,
     ExpressionStatement,
@@ -141,6 +142,7 @@ function lowerStatement(
             statements,
             heapLocals,
             variableKinds,
+            nextTemp,
         )
         return
     }
@@ -153,6 +155,7 @@ function lowerVariableDeclaration(
     statements: CStatement[],
     heapLocals: string[],
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
         statements.push({
@@ -205,6 +208,29 @@ function lowerVariableDeclaration(
                 ],
             },
         })
+        heapLocals.push(statement.identifier.name)
+        variableKinds.set(statement.identifier.name, 'real')
+        return
+    }
+
+    if (isRealExpression(statement.initializer, variableKinds)) {
+        const lowered = lowerRealExpression(
+            statement.initializer,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        const detachedHeapTemps = detachOwnedValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'Real*',
+            name: statement.identifier.name,
+            initializer: lowered.value,
+        })
+        heapLocals.push(...detachedHeapTemps)
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'real')
         return
@@ -355,6 +381,106 @@ function lowerStringExpression(
     throw new Error(
         'Only truthvalue expressions and <identifier>.toString() are supported as print arguments',
     )
+}
+
+function isRealExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+): boolean {
+    switch (expression.kind) {
+        case 'RealLiteral':
+            return true
+        case 'Identifier':
+            return variableKinds.get(expression.name) === 'real'
+        case 'BinaryExpression':
+            return (
+                (expression.operator === '+' || expression.operator === '-') &&
+                isRealExpression(expression.left, variableKinds) &&
+                isRealExpression(expression.right, variableKinds)
+            )
+        default:
+            return false
+    }
+}
+
+function lowerRealExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
+    if (expression.kind === 'RealLiteral') {
+        const temp = nextTemp()
+        return {
+            setup: [
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'Real*',
+                    name: temp,
+                    initializer: {
+                        kind: 'CCallExpression',
+                        callee: 'Real¸fromString',
+                        args: [
+                            { kind: 'CStringLiteral', value: expression.value },
+                        ],
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+            heapTemps: [temp],
+        }
+    }
+
+    if (
+        expression.kind === 'Identifier' &&
+        variableKinds.get(expression.name) === 'real'
+    ) {
+        return {
+            setup: [],
+            value: { kind: 'CIdentifier', name: expression.name },
+            heapTemps: [],
+        }
+    }
+
+    if (expression.kind === 'BinaryExpression') {
+        return lowerRealBinaryExpression(expression, variableKinds, nextTemp)
+    }
+
+    throw new Error('Unsupported real expression in this vertical slice')
+}
+
+function lowerRealBinaryExpression(
+    expression: BinaryExpression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
+    const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
+    const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
+    const callee = expression.operator === '+' ? 'Real·add' : 'Real·subtract'
+    const temp = nextTemp()
+
+    return {
+        setup: [
+            ...left.setup,
+            ...right.setup,
+            {
+                kind: 'CVariableDeclaration',
+                type: 'Real*',
+                name: temp,
+                initializer: {
+                    kind: 'CCallExpression',
+                    callee,
+                    args: [left.value, right.value],
+                },
+            },
+        ],
+        value: { kind: 'CIdentifier', name: temp },
+        heapTemps: [...left.heapTemps, ...right.heapTemps, temp],
+    }
+}
+
+function detachOwnedValue(value: CExpression, heapTemps: string[]) {
+    if (value.kind !== 'CIdentifier') return heapTemps
+    return heapTemps.filter((name) => name !== value.name)
 }
 
 function cTruthValue(value: 'false' | 'ambiguous' | 'true'): string {

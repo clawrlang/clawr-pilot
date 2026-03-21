@@ -14,5 +14,7 @@ extern const __type_info Realˇtype;
 
 Real* Real¸fromString(const char* value);
 const char* Real·toString(Real* self);
+Real* Real·add(Real* left, Real* right);
+Real* Real·subtract(Real* left, Real* right);
 
 #endif // CLAWR_REAL_H
