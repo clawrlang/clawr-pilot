@@ -10,15 +10,14 @@ describe('IR lowering snapshot', () => {
         const ast = parseClawr(source, 'test-input.clawr')
         const ir = lowerToCIr(ast)
 
-        const actual = `${JSON.stringify(ir, null, 2)}\n`
         const expectedPath = path.join(
             __dirname,
             'snapshots',
             'const-integer.ir.json',
         )
-        const expected = fs.readFileSync(expectedPath, 'utf-8')
+        const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf-8'))
 
-        expect(actual).toBe(expected)
+        expect(ir).toEqual(expected)
     })
 
     it('matches the canonical IR for const real print program', () => {
@@ -26,14 +25,13 @@ describe('IR lowering snapshot', () => {
         const ast = parseClawr(source, 'test-real-input.clawr')
         const ir = lowerToCIr(ast)
 
-        const actual = `${JSON.stringify(ir, null, 2)}\n`
         const expectedPath = path.join(
             __dirname,
             'snapshots',
             'real-to-string.ir.json',
         )
-        const expected = fs.readFileSync(expectedPath, 'utf-8')
+        const expected = JSON.parse(fs.readFileSync(expectedPath, 'utf-8'))
 
-        expect(actual).toBe(expected)
+        expect(ir).toEqual(expected)
     })
 })
