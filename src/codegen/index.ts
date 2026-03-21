@@ -478,14 +478,22 @@ function lowerIntegerBinaryExpression(
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
-    const left = lowerIntegerExpression(expression.left, variableKinds, nextTemp)
-    const right = lowerIntegerExpression(expression.right, variableKinds, nextTemp)
+    const left = lowerIntegerExpression(
+        expression.left,
+        variableKinds,
+        nextTemp,
+    )
+    const right = lowerIntegerExpression(
+        expression.right,
+        variableKinds,
+        nextTemp,
+    )
     const calleeMap: Record<string, string> = {
-        '+': 'Integer·add',
-        '-': 'Integer·subtract',
-        '*': 'Integer·multiply',
-        '/': 'Integer·divideIntegers',
-        '^': 'Integer·power',
+        '+': 'Integer¸add_left_right',
+        '-': 'Integer¸subtract_left_right',
+        '*': 'Integer¸multiply_left_right',
+        '/': 'Integer¸divide_dividend_by',
+        '^': 'Integer¸power_base_exponent',
     }
     const callee = calleeMap[expression.operator]
     const temp = nextTemp()
@@ -582,11 +590,11 @@ function lowerRealBinaryExpression(
     const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
     const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
     const calleeMap: Record<string, string> = {
-        '+': 'Real·add',
-        '-': 'Real·subtract',
-        '*': 'Real·multiply',
-        '/': 'Real·divide',
-        '^': 'Real·power',
+        '+': 'Real¸add_left_right',
+        '-': 'Real¸subtract_left_right',
+        '*': 'Real¸multiply_left_right',
+        '/': 'Real¸divide_dividend_by',
+        '^': 'Real¸power_base_exponent',
     }
     const callee = calleeMap[expression.operator]
     const temp = nextTemp()
