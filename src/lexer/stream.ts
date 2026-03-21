@@ -26,7 +26,7 @@ import { positionedError } from './positioned-error'
 
 export class TokenStream {
     private source: Source
-    file: string
+    private file: string
     private previousToken: Token | undefined // <-- add this
 
     constructor(source: string | Source, file: string) {

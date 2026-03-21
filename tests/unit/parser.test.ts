@@ -37,3 +37,25 @@ describe('parser statement separators', () => {
         ).toThrowError(/src\/hello\.clawr:1:14:/)
     })
 })
+
+describe('parser variable declaration semantics', () => {
+    for (const semantics of ['const', 'mut', 'ref'] as const) {
+        it(`allows ${semantics} variables`, () => {
+            const program = parseClawr(`${semantics} x = 42`, 'test')
+
+            expect(program.statements).toHaveLength(1)
+            expect(program.statements[0]).toMatchObject({
+                kind: 'VariableDeclaration',
+                semantics,
+            })
+        })
+    }
+
+    for (const semantics of ['let', 'var'] as const) {
+        it(`disallows ${semantics} variables`, () => {
+            expect(() =>
+                parseClawr(`${semantics} x = 42`, 'test'),
+            ).toThrowError()
+        })
+    }
+})
