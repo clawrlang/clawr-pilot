@@ -33,8 +33,10 @@ export class Parser {
 
         this.skipTrivia()
         while (this.stream.peek()) {
-            statements.push(this.parseStatement())
-            this.consumeStatementTerminator()
+            const statement = this.parseStatement()
+            statements.push(statement)
+            const endLine = this.lastTokenLine()
+            this.consumeStatementTerminator(endLine)
         }
 
         return {
@@ -185,7 +187,17 @@ export class Parser {
         }
     }
 
-    consumeStatementTerminator() {
+    lastTokenLine(): number {
+        // peek() without skippingNewline: if next is NEWLINE or EOF the statement
+        // already ended on the line before; otherwise we are still on the same line.
+        const next = this.stream.peek()
+        if (!next || next.kind === 'NEWLINE') return -1
+        // The statement ended on the line of its last consumed token, which is
+        // the line just before this (possibly same-line) token.
+        return next.line
+    }
+
+    consumeStatementTerminator(statementEndLine: number) {
         const next = this.stream.peek()
         if (!next) return
 
@@ -198,6 +210,15 @@ export class Parser {
             this.stream.next()
             this.skipTrivia()
             return
+        }
+
+        // At this point there is a non-whitespace token with no separator.
+        if (next.line === statementEndLine) {
+            throw parseError(
+                this.file,
+                next,
+                `Statements on the same line must be separated by a semicolon`,
+            )
         }
 
         throw parseError(

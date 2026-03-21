@@ -23,9 +23,17 @@ describe('parser statement separators', () => {
         expect(program.statements).toHaveLength(2)
     })
 
-    it('requires separator for statements on the same line', () => {
+    it('requires semicolon when two statements share a line', () => {
         expect(() =>
             parseClawr('const x = 42 print(x.toString())', 'test'),
-        ).toThrowError(/Expected newline or ; between statements/)
+        ).toThrowError(
+            /Statements on the same line must be separated by a semicolon/,
+        )
+    })
+
+    it('includes source position in the diagnostic', () => {
+        expect(() =>
+            parseClawr('const x = 42 print(x.toString())', 'src/hello.clawr'),
+        ).toThrowError(/src\/hello\.clawr:1:14:/)
     })
 })
