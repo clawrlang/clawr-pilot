@@ -33,10 +33,19 @@ static char* formatLongDouble(long double value) {
     int length = snprintf(NULL, 0, "%.21Lg", value);
     if (length < 0) panic("Failed to format real value");
 
-    char* out = malloc((size_t)length + 1);
+    // +3 for potential ".0" suffix and null terminator
+    char* out = malloc((size_t)length + 3);
     if (!out) panic("Out of memory in Real formatter");
 
     snprintf(out, (size_t)length + 1, "%.21Lg", value);
+
+    // Ensure the result is visibly a real, not an integer (e.g. 4 -> 4.0)
+    int has_marker = 0;
+    for (char* p = out; *p; p++) {
+        if (*p == '.' || *p == 'e' || *p == 'E') { has_marker = 1; break; }
+    }
+    if (!has_marker) strcat(out, ".0");
+
     return out;
 }
 
