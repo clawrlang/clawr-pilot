@@ -10,7 +10,8 @@ describe('parser statement separators', () => {
 
         expect(program.statements).toHaveLength(2)
         expect(program.statements[0]).toMatchObject({
-            kind: 'ConstDeclaration',
+            kind: 'VariableDeclaration',
+            semantics: 'const',
         })
         expect(program.statements[1]).toMatchObject({
             kind: 'ExpressionStatement',

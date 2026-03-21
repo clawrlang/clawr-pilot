@@ -1,9 +1,9 @@
 import type {
     CallExpression,
-    ConstDeclaration,
     Expression,
     ExpressionStatement,
     Program,
+    VariableDeclaration,
 } from '../ast'
 import {
     emitC,
@@ -132,22 +132,22 @@ function lowerStatement(
     locals: string[],
     nextTemp: () => string,
 ) {
-    if (statement.kind === 'ConstDeclaration') {
-        lowerConstDeclaration(statement, statements, locals)
+    if (statement.kind === 'VariableDeclaration') {
+        lowerVariableDeclaration(statement, statements, locals)
         return
     }
 
     lowerExpressionStatement(statement, statements, nextTemp)
 }
 
-function lowerConstDeclaration(
-    statement: ConstDeclaration,
+function lowerVariableDeclaration(
+    statement: VariableDeclaration,
     statements: CStatement[],
     locals: string[],
 ) {
     if (statement.initializer.kind !== 'IntegerLiteral') {
         throw new Error(
-            'Only integer literal const initializers are supported in this vertical slice',
+            'Only integer literal variable initializers are supported in this vertical slice',
         )
     }
 

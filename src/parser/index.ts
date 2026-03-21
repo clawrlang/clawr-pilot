@@ -3,7 +3,6 @@ import type { Token } from '../lexer'
 import { positionedError } from '../lexer/positioned-error'
 import type {
     CallExpression,
-    ConstDeclaration,
     Expression,
     ExpressionStatement,
     IdentifierExpression,
@@ -11,6 +10,8 @@ import type {
     MemberExpression,
     Program,
     Statement,
+    VariableDeclaration,
+    VariableSemantics,
 } from '../ast'
 
 export function parseClawr(source: string, file: string): Program {
@@ -33,24 +34,43 @@ function parseStatement(stream: TokenStream, file: string): Statement {
     const token = stream.peek({ skippingNewline: true })
     if (!token) throw new Error('Unexpected EOF')
 
-    if (token.kind === 'KEYWORD' && token.keyword === 'const') {
-        return parseConstDeclaration(stream, file)
+    if (
+        token.kind === 'KEYWORD' &&
+        (token.keyword === 'const' ||
+            token.keyword === 'mut' ||
+            token.keyword === 'ref')
+    ) {
+        return parseVariableDeclaration(stream, file)
     }
 
     return parseExpressionStatement(stream, file)
 }
 
-function parseConstDeclaration(
+function parseVariableDeclaration(
     stream: TokenStream,
     file: string,
-): ConstDeclaration {
-    stream.expect('KEYWORD', 'const')
+): VariableDeclaration {
+    const token = stream.peek({ skippingNewline: true })
+    if (
+        !token ||
+        token.kind !== 'KEYWORD' ||
+        (token.keyword !== 'const' &&
+            token.keyword !== 'mut' &&
+            token.keyword !== 'ref')
+    ) {
+        throw new Error('Expected const, mut, or ref keyword')
+    }
+
+    const semantics = token.keyword as VariableSemantics
+    stream.next({ skippingNewline: true })
+
     const ident = stream.expect('IDENTIFIER')
     stream.expect('PUNCTUATION', '=')
     const initializer = parseExpression(stream, file)
 
     return {
-        kind: 'ConstDeclaration',
+        kind: 'VariableDeclaration',
+        semantics,
         identifier: {
             kind: 'Identifier',
             name: ident.identifier,

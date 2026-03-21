@@ -3,10 +3,13 @@ export interface Program {
     statements: Statement[]
 }
 
-export type Statement = ConstDeclaration | ExpressionStatement
+export type VariableSemantics = 'const' | 'mut' | 'ref'
 
-export interface ConstDeclaration {
-    kind: 'ConstDeclaration'
+export type Statement = VariableDeclaration | ExpressionStatement
+
+export interface VariableDeclaration {
+    kind: 'VariableDeclaration'
+    semantics: VariableSemantics
     identifier: IdentifierExpression
     initializer: Expression
 }
