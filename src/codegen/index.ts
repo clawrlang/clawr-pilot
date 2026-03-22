@@ -594,9 +594,53 @@ function isTruthExpression(
                 isTruthExpression(expression.left, variableKinds) &&
                 isTruthExpression(expression.right, variableKinds)
             )
+        case 'CallExpression':
+            return isTruthCallExpression(expression, variableKinds)
         default:
             return false
     }
+}
+
+function isTruthCallExpression(
+    expression: CallExpression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+): boolean {
+    if (expression.callee.kind === 'Identifier') {
+        if (
+            (expression.callee.name === 'adjust' ||
+                expression.callee.name === 'rotate') &&
+            expression.arguments.length === 2
+        ) {
+            return (
+                isTruthExpression(expression.arguments[0], variableKinds) &&
+                isTruthExpression(expression.arguments[1], variableKinds)
+            )
+        }
+        return false
+    }
+
+    if (expression.callee.kind !== 'MemberExpression') return false
+
+    if (!isTruthExpression(expression.callee.object, variableKinds))
+        return false
+
+    if (
+        (expression.callee.property === 'adjust' ||
+            expression.callee.property === 'rotate') &&
+        expression.arguments.length === 1
+    ) {
+        return isTruthExpression(expression.arguments[0], variableKinds)
+    }
+
+    if (
+        (expression.callee.property === 'rotateUp' ||
+            expression.callee.property === 'rotateDown') &&
+        expression.arguments.length === 0
+    ) {
+        return true
+    }
+
+    return false
 }
 
 function lowerTruthExpression(
@@ -685,7 +729,161 @@ function lowerTruthExpression(
         }
     }
 
+    if (expression.kind === 'CallExpression') {
+        if (expression.callee.kind === 'Identifier') {
+            if (
+                expression.callee.name === 'adjust' &&
+                expression.arguments.length === 2
+            ) {
+                const a = lowerTruthExpression(
+                    expression.arguments[0],
+                    variableKinds,
+                    nextTemp,
+                )
+                const b = lowerTruthExpression(
+                    expression.arguments[1],
+                    variableKinds,
+                    nextTemp,
+                )
+                return lowerAdjustExpression(a, b, nextTemp)
+            }
+
+            if (
+                expression.callee.name === 'rotate' &&
+                expression.arguments.length === 2
+            ) {
+                const a = lowerTruthExpression(
+                    expression.arguments[0],
+                    variableKinds,
+                    nextTemp,
+                )
+                const by = lowerTruthExpression(
+                    expression.arguments[1],
+                    variableKinds,
+                    nextTemp,
+                )
+                return lowerRotateExpression(a, by, nextTemp)
+            }
+        }
+
+        if (expression.callee.kind === 'MemberExpression') {
+            const object = lowerTruthExpression(
+                expression.callee.object,
+                variableKinds,
+                nextTemp,
+            )
+
+            if (
+                expression.callee.property === 'adjust' &&
+                expression.arguments.length === 1
+            ) {
+                const target = lowerTruthExpression(
+                    expression.arguments[0],
+                    variableKinds,
+                    nextTemp,
+                )
+                return lowerAdjustExpression(object, target, nextTemp)
+            }
+
+            if (
+                expression.callee.property === 'rotate' &&
+                expression.arguments.length === 1
+            ) {
+                const by = lowerTruthExpression(
+                    expression.arguments[0],
+                    variableKinds,
+                    nextTemp,
+                )
+                return lowerRotateExpression(object, by, nextTemp)
+            }
+
+            if (
+                expression.callee.property === 'rotateUp' &&
+                expression.arguments.length === 0
+            ) {
+                return lowerRotateExpression(
+                    object,
+                    {
+                        setup: [],
+                        value: { kind: 'CIntegerLiteral', value: '2' },
+                    },
+                    nextTemp,
+                )
+            }
+
+            if (
+                expression.callee.property === 'rotateDown' &&
+                expression.arguments.length === 0
+            ) {
+                return lowerRotateExpression(
+                    object,
+                    {
+                        setup: [],
+                        value: { kind: 'CIntegerLiteral', value: '0' },
+                    },
+                    nextTemp,
+                )
+            }
+        }
+    }
+
     throw new Error('Unsupported truthvalue expression in this vertical slice')
+}
+
+function lowerAdjustExpression(
+    a: { setup: CStatement[]; value: CExpression },
+    b: { setup: CStatement[]; value: CExpression },
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    const temp = nextTemp()
+    const aCode = cExprCode(a.value)
+    const bCode = cExprCode(b.value)
+
+    return {
+        setup: [
+            ...a.setup,
+            ...b.setup,
+            {
+                kind: 'CVariableDeclaration',
+                type: 'int',
+                name: temp,
+                initializer: {
+                    kind: 'CRawExpression',
+                    // direction: false(0)=down, ambiguous(1)=identity, true(2)=up
+                    // offset = b - 1 ∈ {-1,0,+1}; clamp result to [0,2]
+                    code: `((${aCode}) + (${bCode}) - 1 < 0 ? 0 : ((${aCode}) + (${bCode}) - 1 > 2 ? 2 : (${aCode}) + (${bCode}) - 1))`,
+                },
+            },
+        ],
+        value: { kind: 'CIdentifier', name: temp },
+    }
+}
+
+function lowerRotateExpression(
+    a: { setup: CStatement[]; value: CExpression },
+    by: { setup: CStatement[]; value: CExpression },
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    const temp = nextTemp()
+    const aCode = cExprCode(a.value)
+    const byCode = cExprCode(by.value)
+
+    return {
+        setup: [
+            ...a.setup,
+            ...by.setup,
+            {
+                kind: 'CVariableDeclaration',
+                type: 'int',
+                name: temp,
+                initializer: {
+                    kind: 'CRawExpression',
+                    code: `(((${aCode}) + ((${byCode}) - 1) + 3) % 3)`,
+                },
+            },
+        ],
+        value: { kind: 'CIdentifier', name: temp },
+    }
 }
 
 function cExprCode(expression: CExpression): string {

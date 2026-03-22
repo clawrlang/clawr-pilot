@@ -1,0 +1,25 @@
+const f = false
+const a = ambiguous
+const t = true
+
+print(adjust(f, t))
+print(adjust(t, f))
+print(a.adjust(t))
+
+print(rotate(f, t))
+print(rotate(f, a))
+print(rotate(f, f))
+
+print(a.rotateUp())
+print(a.rotateDown())
+print(a.rotate(t))
+print(a.rotate(f))
+
+// identity: ambiguous direction = no change
+print(adjust(f, a))
+print(adjust(t, a))
+print(adjust(a, a))
+
+// clamping at extremes
+print(adjust(f, f))
+print(adjust(t, t))
