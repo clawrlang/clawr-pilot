@@ -20,7 +20,10 @@ export function generateC(program: Program): string {
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
-    const variableKinds = new Map<string, 'integer' | 'truthvalue' | 'real'>()
+    const variableKinds = new Map<
+        string,
+        'integer' | 'truthvalue' | 'real' | 'string'
+    >()
     let tempCounter = 0
 
     for (const statement of program.statements) {
@@ -133,7 +136,7 @@ function lowerStatement(
     statement: Program['statements'][number],
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
@@ -154,7 +157,7 @@ function lowerVariableDeclaration(
     statement: VariableDeclaration,
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
@@ -276,15 +279,36 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (statement.initializer.kind === 'StringLiteral') {
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'String*',
+            name: statement.identifier.name,
+            initializer: {
+                kind: 'CCallExpression',
+                callee: 'String¸fromCString',
+                args: [
+                    {
+                        kind: 'CStringLiteral',
+                        value: statement.initializer.value,
+                    },
+                ],
+            },
+        })
+        heapLocals.push(statement.identifier.name)
+        variableKinds.set(statement.identifier.name, 'string')
+        return
+    }
+
     throw new Error(
-        'Only integer, truthvalue, and real literal variable initializers are supported in this vertical slice',
+        'Only integer, truthvalue, real, and string literal variable initializers are supported in this vertical slice',
     )
 }
 
 function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -300,7 +324,7 @@ function lowerExpressionStatement(
 function lowerPrintCall(
     call: CallExpression,
     statements: CStatement[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -339,7 +363,7 @@ function lowerPrintCall(
 
 function lowerStringExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; releaseAfterUse?: string } {
     if (expression.kind === 'TruthLiteral') {
@@ -352,6 +376,42 @@ function lowerStringExpression(
         }
     }
 
+    if (expression.kind === 'StringLiteral') {
+        const stringObjectTemp = nextTemp()
+        const cStringTemp = nextTemp()
+        return {
+            setup: [
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'String*',
+                    name: stringObjectTemp,
+                    initializer: {
+                        kind: 'CCallExpression',
+                        callee: 'String¸fromCString',
+                        args: [
+                            {
+                                kind: 'CStringLiteral',
+                                value: expression.value,
+                            },
+                        ],
+                    },
+                },
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'const char*',
+                    name: cStringTemp,
+                    initializer: {
+                        kind: 'CCallExpression',
+                        callee: 'String·toCString',
+                        args: [{ kind: 'CIdentifier', name: stringObjectTemp }],
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: cStringTemp },
+            releaseAfterUse: stringObjectTemp,
+        }
+    }
+
     if (expression.kind === 'Identifier') {
         const variableKind = variableKinds.get(expression.name)
         if (variableKind === 'truthvalue') {
@@ -361,6 +421,26 @@ function lowerStringExpression(
                     kind: 'CRawExpression',
                     code: `(${expression.name} == 0 ? "false" : (${expression.name} == 2 ? "true" : "ambiguous"))`,
                 },
+            }
+        }
+        if (variableKind === 'string') {
+            const cStringTemp = nextTemp()
+            return {
+                setup: [
+                    {
+                        kind: 'CVariableDeclaration',
+                        type: 'const char*',
+                        name: cStringTemp,
+                        initializer: {
+                            kind: 'CCallExpression',
+                            callee: 'String·toCString',
+                            args: [
+                                { kind: 'CIdentifier', name: expression.name },
+                            ],
+                        },
+                    },
+                ],
+                value: { kind: 'CIdentifier', name: cStringTemp },
             }
         }
     }
@@ -449,7 +529,7 @@ function lowerStringExpression(
 
 function isIntegerExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
 ): boolean {
     switch (expression.kind) {
         case 'IntegerLiteral':
@@ -469,7 +549,7 @@ function isIntegerExpression(
 
 function lowerIntegerExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
     if (expression.kind === 'IntegerLiteral') {
@@ -517,7 +597,7 @@ function lowerIntegerExpression(
 
 function lowerIntegerBinaryExpression(
     expression: BinaryExpression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
     const left = lowerIntegerExpression(
@@ -562,7 +642,7 @@ function lowerIntegerBinaryExpression(
 
 function isRealExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
 ): boolean {
     switch (expression.kind) {
         case 'RealLiteral':
@@ -582,7 +662,7 @@ function isRealExpression(
 
 function isTruthExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
 ): boolean {
     switch (expression.kind) {
         case 'TruthLiteral':
@@ -610,7 +690,7 @@ function isTruthExpression(
 
 function isTruthCallExpression(
     expression: CallExpression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
 ): boolean {
     if (expression.callee.kind === 'Identifier') {
         if (
@@ -652,7 +732,7 @@ function isTruthCallExpression(
 
 function lowerTruthExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression } {
     if (expression.kind === 'TruthLiteral') {
@@ -902,7 +982,7 @@ function cExprCode(expression: CExpression): string {
 
 function lowerRealExpression(
     expression: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
     if (expression.kind === 'RealLiteral') {
@@ -947,7 +1027,7 @@ function lowerRealExpression(
 
 function lowerRealBinaryExpression(
     expression: BinaryExpression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression; heapTemps: string[] } {
     const left = lowerRealExpression(expression.left, variableKinds, nextTemp)

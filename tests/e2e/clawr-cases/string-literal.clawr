@@ -1,0 +1,4 @@
+const greeting = "hello"
+const world = "world"
+print(greeting)
+print(world)

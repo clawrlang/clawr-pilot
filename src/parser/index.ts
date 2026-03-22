@@ -12,6 +12,7 @@ import type {
     Program,
     RealLiteralExpression,
     Statement,
+    StringLiteralExpression,
     TruthLiteralExpression,
     UnaryExpression,
     VariableDeclaration,
@@ -295,6 +296,13 @@ export class Parser {
                 kind: 'TruthLiteral',
                 value: token.value,
             } satisfies TruthLiteralExpression
+        }
+
+        if (token.kind === 'STRING_LITERAL') {
+            return {
+                kind: 'StringLiteral',
+                value: token.value,
+            } satisfies StringLiteralExpression
         }
 
         throw parseError(
