@@ -1,7 +1,7 @@
 import type { BinaryExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
+import type { VariableKind } from './lowering-types'
 
-type VariableKind = 'integer' | 'truthvalue' | 'real' | 'string'
 type LoweredRealExpression = {
     setup: CStatement[]
     value: CExpression

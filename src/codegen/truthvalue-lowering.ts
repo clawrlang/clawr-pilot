@@ -9,8 +9,8 @@ import {
     mangleLabeledCallee,
 } from './callable-registry'
 import { cExprCode, cTruthValue } from './lowering-utils'
+import type { VariableKind } from './lowering-types'
 
-type VariableKind = 'integer' | 'truthvalue' | 'real' | 'string'
 type TruthBaseName = 'adjust' | 'rotate'
 type LoweredTruthExpression = { setup: CStatement[]; value: CExpression }
 type TruthFreeAliasName = 'rotateUp' | 'rotateDown' | 'adjustUp' | 'adjustDown'

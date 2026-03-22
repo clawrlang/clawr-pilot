@@ -11,6 +11,7 @@ import {
     type CStatement,
     type CTranslationUnit,
 } from '../ir/c'
+import type { VariableKind } from './lowering-types'
 import { cTruthValue } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
@@ -24,10 +25,7 @@ export function generateC(program: Program): string {
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
-    const variableKinds = new Map<
-        string,
-        'integer' | 'truthvalue' | 'real' | 'string'
-    >()
+    const variableKinds = new Map<string, VariableKind>()
     let tempCounter = 0
 
     for (const statement of program.statements) {
@@ -140,7 +138,7 @@ function lowerStatement(
     statement: Program['statements'][number],
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    variableKinds: Map<string, VariableKind>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
@@ -161,7 +159,7 @@ function lowerVariableDeclaration(
     statement: VariableDeclaration,
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    variableKinds: Map<string, VariableKind>,
     nextTemp: () => string,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
@@ -312,7 +310,7 @@ function lowerVariableDeclaration(
 function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    variableKinds: Map<string, VariableKind>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression

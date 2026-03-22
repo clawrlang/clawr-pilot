@@ -2,8 +2,8 @@ import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
 import { cExprCode } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
+import type { VariableKind } from './lowering-types'
 
-type VariableKind = 'integer' | 'truthvalue' | 'real' | 'string'
 type LoweredStringExpression = {
     setup: CStatement[]
     value: CExpression
