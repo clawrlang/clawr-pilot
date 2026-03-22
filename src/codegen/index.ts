@@ -694,16 +694,73 @@ function isTruthExpression(
     }
 }
 
+type TruthBaseName = 'adjust' | 'rotate'
+
+type TruthCallSignatureSpec = {
+    baseName: TruthBaseName
+    arity: number
+    canonicalLabels: ReadonlyArray<string | null>
+}
+
+const TRUTH_FREE_CALL_SPECS: Record<TruthBaseName, TruthCallSignatureSpec> = {
+    adjust: {
+        baseName: 'adjust',
+        arity: 2,
+        canonicalLabels: [null, 'towards'],
+    },
+    rotate: {
+        baseName: 'rotate',
+        arity: 2,
+        canonicalLabels: [null, 'by'],
+    },
+}
+
+const TRUTH_METHOD_CALL_SPECS: Record<TruthBaseName, TruthCallSignatureSpec> = {
+    adjust: {
+        baseName: 'adjust',
+        arity: 1,
+        canonicalLabels: ['towards'],
+    },
+    rotate: {
+        baseName: 'rotate',
+        arity: 1,
+        canonicalLabels: ['by'],
+    },
+}
+
+type TruthMethodAlias = {
+    property: 'rotateUp' | 'rotateDown'
+    target: TruthBaseName
+    label: string
+    value: Expression
+}
+
+const TRUTH_METHOD_ALIASES: Record<
+    'rotateUp' | 'rotateDown',
+    TruthMethodAlias
+> = {
+    rotateUp: {
+        property: 'rotateUp',
+        target: 'rotate',
+        label: 'by',
+        value: { kind: 'TruthLiteral', value: 'true' },
+    },
+    rotateDown: {
+        property: 'rotateDown',
+        target: 'rotate',
+        label: 'by',
+        value: { kind: 'TruthLiteral', value: 'false' },
+    },
+}
+
 function isTruthCallExpression(
     expression: CallExpression,
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
 ): boolean {
     if (expression.callee.kind === 'Identifier') {
-        if (
-            (expression.callee.name === 'adjust' ||
-                expression.callee.name === 'rotate') &&
-            expression.arguments.length === 2
-        ) {
+        const spec =
+            TRUTH_FREE_CALL_SPECS[expression.callee.name as TruthBaseName]
+        if (spec && expression.arguments.length === spec.arity) {
             return (
                 isTruthExpression(
                     expression.arguments[0].value,
@@ -717,11 +774,13 @@ function isTruthCallExpression(
 
     if (expression.callee.kind !== 'MemberExpression') return false
 
-    if (
-        (expression.callee.property === 'adjust' ||
-            expression.callee.property === 'rotate') &&
-        expression.arguments.length === 1
-    ) {
+    if (!isTruthExpression(expression.callee.object, variableKinds)) {
+        return false
+    }
+
+    const methodSpec =
+        TRUTH_METHOD_CALL_SPECS[expression.callee.property as TruthBaseName]
+    if (methodSpec && expression.arguments.length === methodSpec.arity) {
         return isTruthExpression(expression.arguments[0].value, variableKinds)
     }
 
@@ -824,27 +883,12 @@ function lowerTruthExpression(
 
     if (expression.kind === 'CallExpression') {
         if (expression.callee.kind === 'Identifier') {
-            if (
-                expression.callee.name === 'adjust' &&
-                expression.arguments.length === 2
-            ) {
+            const spec =
+                TRUTH_FREE_CALL_SPECS[expression.callee.name as TruthBaseName]
+            if (spec && expression.arguments.length === spec.arity) {
                 return lowerValidatedTruthRuntimeCall(
                     expression,
-                    truthCallSignature('adjust'),
-                    'adjust',
-                    variableKinds,
-                    nextTemp,
-                )
-            }
-
-            if (
-                expression.callee.name === 'rotate' &&
-                expression.arguments.length === 2
-            ) {
-                return lowerValidatedTruthRuntimeCall(
-                    expression,
-                    truthCallSignature('rotate'),
-                    'rotate',
+                    spec,
                     variableKinds,
                     nextTemp,
                 )
@@ -852,55 +896,44 @@ function lowerTruthExpression(
         }
 
         if (expression.callee.kind === 'MemberExpression') {
+            const methodSpec =
+                TRUTH_METHOD_CALL_SPECS[
+                    expression.callee.property as TruthBaseName
+                ]
             if (
-                expression.callee.property === 'adjust' &&
-                expression.arguments.length === 1
+                methodSpec &&
+                expression.arguments.length === methodSpec.arity
             ) {
                 return lowerValidatedTruthMethodCall(
                     expression,
-                    truthMethodSignature('adjust'),
-                    'adjust',
+                    methodSpec,
+                    null,
                     variableKinds,
                     nextTemp,
                 )
             }
 
             if (
-                expression.callee.property === 'rotate' &&
-                expression.arguments.length === 1
+                (expression.callee.property === 'rotateUp' ||
+                    expression.callee.property === 'rotateDown') &&
+                expression.arguments.length === 0
             ) {
+                const alias =
+                    TRUTH_METHOD_ALIASES[
+                        expression.callee.property as 'rotateUp' | 'rotateDown'
+                    ]
                 return lowerValidatedTruthMethodCall(
                     expression,
-                    truthMethodSignature('rotate'),
-                    'rotate',
-                    variableKinds,
-                    nextTemp,
-                )
-            }
-
-            if (
-                expression.callee.property === 'rotateUp' &&
-                expression.arguments.length === 0
-            ) {
-                return lowerExpandedTruthMethodCall(
-                    expression,
-                    'rotate',
-                    'by',
-                    { kind: 'TruthLiteral', value: 'true' },
-                    variableKinds,
-                    nextTemp,
-                )
-            }
-
-            if (
-                expression.callee.property === 'rotateDown' &&
-                expression.arguments.length === 0
-            ) {
-                return lowerExpandedTruthMethodCall(
-                    expression,
-                    'rotate',
-                    'by',
-                    { kind: 'TruthLiteral', value: 'false' },
+                    {
+                        ...TRUTH_METHOD_CALL_SPECS[alias.target],
+                        canonicalLabels: [alias.label],
+                    },
+                    [
+                        {
+                            label: alias.label,
+                            value: alias.value,
+                        },
+                    ],
                     variableKinds,
                     nextTemp,
                 )
@@ -948,29 +981,16 @@ function callArgumentLabelsMatch(
     )
 }
 
-function truthCallSignature(
-    name: 'adjust' | 'rotate',
-): ReadonlyArray<string | null> {
-    return name === 'adjust' ? [null, 'towards'] : [null, 'by']
-}
-
-function truthMethodSignature(
-    name: 'adjust' | 'rotate',
-): ReadonlyArray<string | null> {
-    return name === 'adjust' ? ['towards'] : ['by']
-}
-
 function lowerValidatedTruthRuntimeCall(
     expression: CallExpression,
-    canonicalLabels: ReadonlyArray<string | null>,
-    baseName: string,
+    spec: TruthCallSignatureSpec,
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression } {
-    validateLabeledCall(expression, canonicalLabels, baseName)
+    validateLabeledCall(expression.arguments, spec)
 
     return lowerTruthRuntimeCall(
-        mangleLabeledCallee(baseName, canonicalLabels),
+        mangleLabeledCallee(spec.baseName, spec.canonicalLabels),
         expression.arguments.map((argument) =>
             lowerTruthExpression(argument.value, variableKinds, nextTemp),
         ),
@@ -980,8 +1000,10 @@ function lowerValidatedTruthRuntimeCall(
 
 function lowerValidatedTruthMethodCall(
     expression: CallExpression,
-    canonicalLabels: ReadonlyArray<string | null>,
-    baseName: string,
+    spec: TruthCallSignatureSpec,
+    overrideArguments: ReadonlyArray<
+        CallExpression['arguments'][number]
+    > | null,
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression } {
@@ -989,7 +1011,8 @@ function lowerValidatedTruthMethodCall(
         throw new Error('Expected truthvalue method call')
     }
 
-    validateLabeledCall(expression, canonicalLabels, baseName)
+    const argumentsToUse = overrideArguments ?? expression.arguments
+    validateLabeledCall(argumentsToUse, spec)
 
     const object = lowerTruthExpression(
         expression.callee.object,
@@ -998,10 +1021,10 @@ function lowerValidatedTruthMethodCall(
     )
 
     return lowerTruthRuntimeCall(
-        mangleLabeledCallee(baseName, [null, ...canonicalLabels]),
+        mangleLabeledCallee(spec.baseName, [null, ...spec.canonicalLabels]),
         [
             object,
-            ...expression.arguments.map((argument) =>
+            ...argumentsToUse.map((argument) =>
                 lowerTruthExpression(argument.value, variableKinds, nextTemp),
             ),
         ],
@@ -1009,42 +1032,15 @@ function lowerValidatedTruthMethodCall(
     )
 }
 
-function lowerExpandedTruthMethodCall(
-    expression: CallExpression,
-    baseName: 'rotate',
-    label: 'by',
-    value: Expression,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
-    nextTemp: () => string,
-): { setup: CStatement[]; value: CExpression } {
-    if (expression.callee.kind !== 'MemberExpression') {
-        throw new Error('Expected truthvalue method call')
-    }
-
-    const object = lowerTruthExpression(
-        expression.callee.object,
-        variableKinds,
-        nextTemp,
-    )
-    const arg = lowerTruthExpression(value, variableKinds, nextTemp)
-
-    return lowerTruthRuntimeCall(
-        mangleLabeledCallee(baseName, [null, label]),
-        [object, arg],
-        nextTemp,
-    )
-}
-
 function validateLabeledCall(
-    expression: CallExpression,
-    canonicalLabels: ReadonlyArray<string | null>,
-    baseName: string,
+    arguments_: ReadonlyArray<CallExpression['arguments'][number]>,
+    spec: TruthCallSignatureSpec,
 ) {
-    if (callArgumentLabelsMatch(expression.arguments, canonicalLabels)) {
+    if (callArgumentLabelsMatch(arguments_, spec.canonicalLabels)) {
         return
     }
 
-    const expected = canonicalLabels
+    const expected = spec.canonicalLabels
         .map((label, index) => {
             if (label === null) {
                 return `argument ${index + 1} must be unlabeled`
@@ -1054,7 +1050,7 @@ function validateLabeledCall(
         })
         .join(', ')
 
-    throw new Error(`Invalid labels for ${baseName}(...): ${expected}`)
+    throw new Error(`Invalid labels for ${spec.baseName}(...): ${expected}`)
 }
 
 function mangleLabeledCallee(
