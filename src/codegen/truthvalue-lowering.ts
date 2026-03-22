@@ -7,6 +7,7 @@ import {
     lookupFreeCallSpec,
     validateLabeledCall,
     mangleLabeledCallee,
+    formatCallDisplayNameFromArguments,
 } from './callable-registry'
 import { cExprCode, cTruthValue } from './lowering-utils'
 import type { VariableKind } from './lowering-types'
@@ -263,6 +264,16 @@ export function lowerTruthExpression(
                     nextTemp,
                 )
             }
+
+            throw new Error(
+                `No function named ${formatCallDisplayNameFromArguments(expression.callee.name, expression.arguments)}.`,
+            )
+        }
+
+        if (expression.callee.kind === 'MemberExpression') {
+            throw new Error(
+                `No method named ${formatCallDisplayNameFromArguments(expression.callee.property, expression.arguments)}.`,
+            )
         }
     }
 

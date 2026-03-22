@@ -58,7 +58,7 @@ describe('IR lowering snapshot', () => {
         const ast = parseClawr(source, 'test-invalid-truthvalue-labels.clawr')
 
         expect(() => lowerToCIr(ast)).toThrow(
-            /Invalid labels for adjust\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled towards:/,
+            /Incorrect argument labels in call to adjust\(_:towards:\): have \(_:by:\), expected \(_:towards:\)/,
         )
     })
 
@@ -67,7 +67,7 @@ describe('IR lowering snapshot', () => {
         const ast = parseClawr(source, 'test-unlabeled-truthvalue-call.clawr')
 
         expect(() => lowerToCIr(ast)).toThrow(
-            /Invalid labels for rotate\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled by:/,
+            /Incorrect argument labels in call to rotate\(_:by:\): have \(_:_:\), expected \(_:by:\)/,
         )
     })
 
@@ -79,7 +79,7 @@ describe('IR lowering snapshot', () => {
             'test-truthvalue-adjust-method-form.clawr',
         )
         expect(() => lowerToCIr(adjustAst)).toThrow(
-            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+            /No method named adjust\(towards:\)\./,
         )
 
         const rotateSource =
@@ -89,7 +89,7 @@ describe('IR lowering snapshot', () => {
             'test-truthvalue-rotate-method-form.clawr',
         )
         expect(() => lowerToCIr(rotateAst)).toThrow(
-            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+            /No method named rotate\(by:\)\./,
         )
 
         const rotateUpSource = 'const a = ambiguous\nprint(a.rotateUp())\n'
@@ -98,7 +98,7 @@ describe('IR lowering snapshot', () => {
             'test-truthvalue-rotate-up-method-form.clawr',
         )
         expect(() => lowerToCIr(rotateUpAst)).toThrow(
-            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+            /No method named rotateUp\(\)\./,
         )
     })
 })

@@ -15,6 +15,32 @@ export type BoundArgumentSpec = {
     value: Expression
 }
 
+function formatLabeledCallShape(labels: ReadonlyArray<string | null>): string {
+    if (labels.length === 0) {
+        return '()'
+    }
+
+    return `(${labels
+        .map((label) => (label === null ? '_:' : `${label}:`))
+        .join('')})`
+}
+
+export function formatCallableDisplayName(
+    baseName: string,
+    labels: ReadonlyArray<string | null>,
+): string {
+    return `${baseName}${formatLabeledCallShape(labels)}`
+}
+
+export function formatCallDisplayNameFromArguments(
+    baseName: string,
+    arguments_: ReadonlyArray<CallArgument>,
+): string {
+    return `${baseName}${formatLabeledCallShape(
+        arguments_.map((argument) => argument.label),
+    )}`
+}
+
 export function lookupFreeCallSpec<TBaseName extends string>(
     registry: CallableRegistry<TBaseName>,
     name: string,
@@ -45,17 +71,14 @@ export function validateLabeledCall(
         return
     }
 
-    const expected = spec.canonicalLabels
-        .map((label, index) => {
-            if (label === null) {
-                return `argument ${index + 1} must be unlabeled`
-            }
+    const have = formatLabeledCallShape(
+        arguments_.map((argument) => argument.label),
+    )
+    const expected = formatLabeledCallShape(spec.canonicalLabels)
 
-            return `argument ${index + 1} must be labeled ${label}:`
-        })
-        .join(', ')
-
-    throw new Error(`Invalid labels for ${spec.baseName}(...): ${expected}`)
+    throw new Error(
+        `Incorrect argument labels in call to ${formatCallableDisplayName(spec.baseName, spec.canonicalLabels)}: have ${have}, expected ${expected}`,
+    )
 }
 
 export function mangleLabeledCallee(

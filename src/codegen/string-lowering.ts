@@ -215,6 +215,33 @@ function lowerStringExpression(
                 releaseAfterUse: stringObjectTemp,
             }
         }
+
+        try {
+            const lowered = lowerTruthExpression(
+                expression,
+                variableKinds,
+                nextTemp,
+            )
+            const code = cExprCode(lowered.value)
+            return {
+                setup: lowered.setup,
+                value: {
+                    kind: 'CRawExpression',
+                    code: `(${code} == 0 ? "false" : (${code} == 2 ? "true" : "ambiguous"))`,
+                },
+            }
+        } catch (error) {
+            if (error instanceof Error) {
+                const message = error.message
+                if (
+                    message.startsWith('No function named ') ||
+                    message.startsWith('No method named ') ||
+                    message.startsWith('Incorrect argument labels in call to ')
+                ) {
+                    throw error
+                }
+            }
+        }
     }
 
     throw new Error(

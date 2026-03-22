@@ -71,7 +71,7 @@ describe('callable registry', () => {
                 registry.freeCalls.adjust,
             ),
         ).toThrow(
-            /Invalid labels for adjust\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled towards:/,
+            /Incorrect argument labels in call to adjust\(_:towards:\): have \(_:by:\), expected \(_:towards:\)/,
         )
     })
 
