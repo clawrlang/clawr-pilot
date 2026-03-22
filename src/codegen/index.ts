@@ -12,6 +12,15 @@ import {
     type CStatement,
     type CTranslationUnit,
 } from '../ir/c'
+import {
+    type CallableSignatureSpec,
+    type CallableRegistry,
+    type MethodAliasSpec,
+    lookupFreeCallSpec,
+    lookupMethodSpec,
+    validateLabeledCall,
+    mangleLabeledCallee,
+} from './callable-registry'
 
 export function generateC(program: Program): string {
     return emitC(lowerToCIr(program))
@@ -696,28 +705,6 @@ function isTruthExpression(
 
 type TruthBaseName = 'adjust' | 'rotate'
 
-type CallableSignatureSpec = {
-    baseName: TruthBaseName
-    arity: number
-    canonicalLabels: ReadonlyArray<string | null>
-}
-
-type CallableRegistry<TBaseName extends string> = {
-    freeCalls: Record<TBaseName, CallableSignatureSpec>
-    methods: Record<TBaseName, CallableSignatureSpec>
-}
-
-type BoundArgumentSpec = {
-    label: string | null
-    value: Expression
-}
-
-type MethodAliasSpec<TBaseName extends string> = {
-    property: string
-    target: TBaseName
-    boundArguments: ReadonlyArray<BoundArgumentSpec>
-}
-
 const TRUTH_CALLABLES: CallableRegistry<TruthBaseName> = {
     freeCalls: {
         adjust: {
@@ -769,26 +756,6 @@ const TRUTH_METHOD_ALIASES: Record<
             },
         ],
     },
-}
-
-function lookupFreeCallSpec(
-    registry: CallableRegistry<TruthBaseName>,
-    name: string,
-    arity: number,
-): CallableSignatureSpec | null {
-    const spec = registry.freeCalls[name as TruthBaseName]
-    if (!spec || spec.arity !== arity) return null
-    return spec
-}
-
-function lookupMethodSpec(
-    registry: CallableRegistry<TruthBaseName>,
-    property: string,
-    arity: number,
-): CallableSignatureSpec | null {
-    const spec = registry.methods[property as TruthBaseName]
-    if (!spec || spec.arity !== arity) return null
-    return spec
 }
 
 function isTruthCallExpression(
@@ -1012,18 +979,6 @@ function lowerTruthRuntimeCall(
     }
 }
 
-function callArgumentLabelsMatch(
-    arguments_: ReadonlyArray<CallExpression['arguments'][number]>,
-    expected: ReadonlyArray<string | null>,
-): boolean {
-    return (
-        arguments_.length === expected.length &&
-        arguments_.every(
-            (argument, index) => argument.label === expected[index],
-        )
-    )
-}
-
 function lowerValidatedTruthRuntimeCall(
     expression: CallExpression,
     spec: CallableSignatureSpec,
@@ -1073,38 +1028,6 @@ function lowerValidatedTruthMethodCall(
         ],
         nextTemp,
     )
-}
-
-function validateLabeledCall(
-    arguments_: ReadonlyArray<CallExpression['arguments'][number]>,
-    spec: CallableSignatureSpec,
-) {
-    if (callArgumentLabelsMatch(arguments_, spec.canonicalLabels)) {
-        return
-    }
-
-    const expected = spec.canonicalLabels
-        .map((label, index) => {
-            if (label === null) {
-                return `argument ${index + 1} must be unlabeled`
-            }
-
-            return `argument ${index + 1} must be labeled ${label}:`
-        })
-        .join(', ')
-
-    throw new Error(`Invalid labels for ${spec.baseName}(...): ${expected}`)
-}
-
-function mangleLabeledCallee(
-    baseName: string,
-    labels: ReadonlyArray<string | null>,
-): string {
-    if (labels.every((label) => label === null)) {
-        return baseName
-    }
-
-    return `${baseName}_${labels.map((label) => label ?? '').join('_')}`
 }
 
 function cExprCode(expression: CExpression): string {
