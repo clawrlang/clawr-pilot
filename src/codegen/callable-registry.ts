@@ -8,18 +8,11 @@ export type CallableSignatureSpec<TBaseName extends string = string> = {
 
 export type CallableRegistry<TBaseName extends string> = {
     freeCalls: Record<TBaseName, CallableSignatureSpec<TBaseName>>
-    methods: Record<TBaseName, CallableSignatureSpec<TBaseName>>
 }
 
 export type BoundArgumentSpec = {
     label: string | null
     value: Expression
-}
-
-export type MethodAliasSpec<TBaseName extends string> = {
-    property: string
-    target: TBaseName
-    boundArguments: ReadonlyArray<BoundArgumentSpec>
 }
 
 export function lookupFreeCallSpec<TBaseName extends string>(
@@ -28,16 +21,6 @@ export function lookupFreeCallSpec<TBaseName extends string>(
     arity: number,
 ): CallableSignatureSpec<TBaseName> | null {
     const spec = registry.freeCalls[name as TBaseName]
-    if (!spec || spec.arity !== arity) return null
-    return spec
-}
-
-export function lookupMethodSpec<TBaseName extends string>(
-    registry: CallableRegistry<TBaseName>,
-    property: string,
-    arity: number,
-): CallableSignatureSpec<TBaseName> | null {
-    const spec = registry.methods[property as TBaseName]
     if (!spec || spec.arity !== arity) return null
     return spec
 }

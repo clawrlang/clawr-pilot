@@ -2,18 +2,21 @@ const f = false
 const a = ambiguous
 const t = true
 
+print(adjustUp(a))
+print(adjustDown(a))
+
 print(adjust(f, towards: t))
 print(adjust(t, towards: f))
-print(a.adjust(towards: t))
+print(adjust(a, towards: t))
 
 print(rotate(f, by: t))
 print(rotate(f, by: a))
 print(rotate(f, by: f))
 
-print(a.rotateUp())
-print(a.rotateDown())
-print(a.rotate(by: t))
-print(a.rotate(by: f))
+print(rotateUp(a))
+print(rotateDown(a))
+print(rotate(a, by: t))
+print(rotate(a, by: f))
 
 // identity: ambiguous direction = no change
 print(adjust(f, towards: a))

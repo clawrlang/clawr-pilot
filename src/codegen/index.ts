@@ -15,9 +15,8 @@ import {
 import {
     type CallableSignatureSpec,
     type CallableRegistry,
-    type MethodAliasSpec,
+    type BoundArgumentSpec,
     lookupFreeCallSpec,
-    lookupMethodSpec,
     validateLabeledCall,
     mangleLabeledCallee,
 } from './callable-registry'
@@ -718,26 +717,19 @@ const TRUTH_CALLABLES: CallableRegistry<TruthBaseName> = {
             canonicalLabels: [null, 'by'],
         },
     },
-    methods: {
-        adjust: {
-            baseName: 'adjust',
-            arity: 1,
-            canonicalLabels: ['towards'],
-        },
-        rotate: {
-            baseName: 'rotate',
-            arity: 1,
-            canonicalLabels: ['by'],
-        },
-    },
 }
 
-const TRUTH_METHOD_ALIASES: Record<
-    'rotateUp' | 'rotateDown',
-    MethodAliasSpec<TruthBaseName>
-> = {
+type TruthFreeAliasName = 'rotateUp' | 'rotateDown' | 'adjustUp' | 'adjustDown'
+
+type TruthFreeAliasSpec = {
+    name: TruthFreeAliasName
+    target: TruthBaseName
+    boundArguments: ReadonlyArray<BoundArgumentSpec>
+}
+
+const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
     rotateUp: {
-        property: 'rotateUp',
+        name: 'rotateUp',
         target: 'rotate',
         boundArguments: [
             {
@@ -747,11 +739,31 @@ const TRUTH_METHOD_ALIASES: Record<
         ],
     },
     rotateDown: {
-        property: 'rotateDown',
+        name: 'rotateDown',
         target: 'rotate',
         boundArguments: [
             {
                 label: 'by',
+                value: { kind: 'TruthLiteral', value: 'false' },
+            },
+        ],
+    },
+    adjustUp: {
+        name: 'adjustUp',
+        target: 'adjust',
+        boundArguments: [
+            {
+                label: 'towards',
+                value: { kind: 'TruthLiteral', value: 'true' },
+            },
+        ],
+    },
+    adjustDown: {
+        name: 'adjustDown',
+        target: 'adjust',
+        boundArguments: [
+            {
+                label: 'towards',
                 value: { kind: 'TruthLiteral', value: 'false' },
             },
         ],
@@ -777,30 +789,19 @@ function isTruthCallExpression(
                 isTruthExpression(expression.arguments[1].value, variableKinds)
             )
         }
+
+        const alias =
+            TRUTH_FREE_ALIASES[
+                expression.callee.name as keyof typeof TRUTH_FREE_ALIASES
+            ]
+        if (alias && expression.arguments.length === 1) {
+            return isTruthExpression(
+                expression.arguments[0].value,
+                variableKinds,
+            )
+        }
+
         return false
-    }
-
-    if (expression.callee.kind !== 'MemberExpression') return false
-
-    if (!isTruthExpression(expression.callee.object, variableKinds)) {
-        return false
-    }
-
-    const methodSpec = lookupMethodSpec(
-        TRUTH_CALLABLES,
-        expression.callee.property,
-        expression.arguments.length,
-    )
-    if (methodSpec) {
-        return isTruthExpression(expression.arguments[0].value, variableKinds)
-    }
-
-    if (
-        (expression.callee.property === 'rotateUp' ||
-            expression.callee.property === 'rotateDown') &&
-        expression.arguments.length === 0
-    ) {
-        return true
     }
 
     return false
@@ -907,43 +908,21 @@ function lowerTruthExpression(
                     nextTemp,
                 )
             }
-        }
 
-        if (expression.callee.kind === 'MemberExpression') {
-            const methodSpec = lookupMethodSpec(
-                TRUTH_CALLABLES,
-                expression.callee.property,
-                expression.arguments.length,
-            )
-            if (methodSpec) {
-                return lowerValidatedTruthMethodCall(
-                    expression,
-                    methodSpec,
-                    null,
-                    variableKinds,
-                    nextTemp,
-                )
-            }
-
-            if (
-                (expression.callee.property === 'rotateUp' ||
-                    expression.callee.property === 'rotateDown') &&
-                expression.arguments.length === 0
-            ) {
-                const alias =
-                    TRUTH_METHOD_ALIASES[
-                        expression.callee.property as 'rotateUp' | 'rotateDown'
-                    ]
-                const aliasTargetSpec = TRUTH_CALLABLES.methods[alias.target]
-                return lowerValidatedTruthMethodCall(
-                    expression,
+            const alias =
+                TRUTH_FREE_ALIASES[
+                    expression.callee.name as keyof typeof TRUTH_FREE_ALIASES
+                ]
+            if (alias && expression.arguments.length === 1) {
+                return lowerValidatedTruthRuntimeCall(
                     {
-                        ...aliasTargetSpec,
-                        canonicalLabels: alias.boundArguments.map(
-                            (argument) => argument.label,
-                        ),
+                        ...expression,
+                        arguments: [
+                            expression.arguments[0],
+                            ...alias.boundArguments,
+                        ],
                     },
-                    alias.boundArguments,
+                    TRUTH_CALLABLES.freeCalls[alias.target],
                     variableKinds,
                     nextTemp,
                 )
@@ -992,40 +971,6 @@ function lowerValidatedTruthRuntimeCall(
         expression.arguments.map((argument) =>
             lowerTruthExpression(argument.value, variableKinds, nextTemp),
         ),
-        nextTemp,
-    )
-}
-
-function lowerValidatedTruthMethodCall(
-    expression: CallExpression,
-    spec: CallableSignatureSpec,
-    overrideArguments: ReadonlyArray<
-        CallExpression['arguments'][number]
-    > | null,
-    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
-    nextTemp: () => string,
-): { setup: CStatement[]; value: CExpression } {
-    if (expression.callee.kind !== 'MemberExpression') {
-        throw new Error('Expected truthvalue method call')
-    }
-
-    const argumentsToUse = overrideArguments ?? expression.arguments
-    validateLabeledCall(argumentsToUse, spec)
-
-    const object = lowerTruthExpression(
-        expression.callee.object,
-        variableKinds,
-        nextTemp,
-    )
-
-    return lowerTruthRuntimeCall(
-        mangleLabeledCallee(spec.baseName, [null, ...spec.canonicalLabels]),
-        [
-            object,
-            ...argumentsToUse.map((argument) =>
-                lowerTruthExpression(argument.value, variableKinds, nextTemp),
-            ),
-        ],
         nextTemp,
     )
 }

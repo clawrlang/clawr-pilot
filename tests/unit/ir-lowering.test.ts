@@ -40,8 +40,8 @@ describe('IR lowering snapshot', () => {
             'const f = false',
             'const t = true',
             'print(adjust(f, towards: t))',
-            'print(f.rotate(by: t))',
-            'print(f.rotateUp())',
+            'print(rotate(f, by: t))',
+            'print(rotateUp(f))',
             '',
         ].join('\n')
         const ast = parseClawr(source, 'test-truthvalue-labels.clawr')
@@ -50,7 +50,6 @@ describe('IR lowering snapshot', () => {
 
         expect(serialized).toContain('adjust__towards')
         expect(serialized).toContain('rotate__by')
-        expect(serialized).not.toContain('TruthValue·')
     })
 
     it('rejects invalid truthvalue argument labels', () => {
@@ -69,6 +68,37 @@ describe('IR lowering snapshot', () => {
 
         expect(() => lowerToCIr(ast)).toThrow(
             /Invalid labels for rotate\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled by:/,
+        )
+    })
+
+    it('rejects truthvalue base functions in method-call form', () => {
+        const adjustSource =
+            'const a = ambiguous\nconst t = true\nprint(a.adjust(towards: t))\n'
+        const adjustAst = parseClawr(
+            adjustSource,
+            'test-truthvalue-adjust-method-form.clawr',
+        )
+        expect(() => lowerToCIr(adjustAst)).toThrow(
+            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+        )
+
+        const rotateSource =
+            'const a = ambiguous\nconst t = true\nprint(a.rotate(by: t))\n'
+        const rotateAst = parseClawr(
+            rotateSource,
+            'test-truthvalue-rotate-method-form.clawr',
+        )
+        expect(() => lowerToCIr(rotateAst)).toThrow(
+            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+        )
+
+        const rotateUpSource = 'const a = ambiguous\nprint(a.rotateUp())\n'
+        const rotateUpAst = parseClawr(
+            rotateUpSource,
+            'test-truthvalue-rotate-up-method-form.clawr',
+        )
+        expect(() => lowerToCIr(rotateUpAst)).toThrow(
+            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
         )
     })
 })
