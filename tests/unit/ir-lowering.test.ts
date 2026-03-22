@@ -62,4 +62,13 @@ describe('IR lowering snapshot', () => {
             /Invalid labels for adjust\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled towards:/,
         )
     })
+
+    it('rejects unlabeled truthvalue calls when labels are part of the signature', () => {
+        const source = 'const f = false\nconst t = true\nprint(rotate(f, t))\n'
+        const ast = parseClawr(source, 'test-unlabeled-truthvalue-call.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /Invalid labels for rotate\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled by:/,
+        )
+    })
 })

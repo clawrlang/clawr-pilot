@@ -1044,15 +1044,6 @@ function validateLabeledCall(
         return
     }
 
-    if (
-        callArgumentLabelsMatch(
-            expression.arguments,
-            canonicalLabels.map(() => null),
-        )
-    ) {
-        return
-    }
-
     const expected = canonicalLabels
         .map((label, index) => {
             if (label === null) {
