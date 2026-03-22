@@ -34,4 +34,20 @@ describe('IR lowering snapshot', () => {
 
         expect(ir).toEqual(expected)
     })
+
+    it('mangles labeled truthvalue helper names into C calls', () => {
+        const source = [
+            'const f = false',
+            'const t = true',
+            'print(adjust(f, towards: t))',
+            'print(f.rotate(by: t))',
+            '',
+        ].join('\n')
+        const ast = parseClawr(source, 'test-truthvalue-labels.clawr')
+        const ir = lowerToCIr(ast)
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('adjust__towards')
+        expect(serialized).toContain('TruthValue·rotate__by')
+    })
 })

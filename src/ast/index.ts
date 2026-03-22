@@ -74,8 +74,13 @@ export interface MemberExpression {
     property: string
 }
 
+export interface CallArgument {
+    label: string | null
+    value: Expression
+}
+
 export interface CallExpression {
     kind: 'CallExpression'
     callee: Expression
-    arguments: Expression[]
+    arguments: CallArgument[]
 }

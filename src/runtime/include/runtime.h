@@ -6,5 +6,6 @@
 #include "integer.h"
 #include "array.h"
 #include "real.h"
+#include "truthvalue.h"
 
 #endif // CLAWR_RUNTIME_H

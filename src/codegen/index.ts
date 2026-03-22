@@ -335,8 +335,14 @@ function lowerPrintCall(
         throw new Error('print(...) must have exactly one argument')
     }
 
+    if (call.arguments[0].label !== null) {
+        throw new Error(
+            'print(...) does not currently support labeled arguments',
+        )
+    }
+
     const render = lowerStringExpression(
-        call.arguments[0],
+        call.arguments[0].value,
         variableKinds,
         nextTemp,
     )
@@ -698,9 +704,28 @@ function isTruthCallExpression(
                 expression.callee.name === 'rotate') &&
             expression.arguments.length === 2
         ) {
+            const expectedLabels =
+                expression.callee.name === 'adjust'
+                    ? ([null, null] as const)
+                    : ([null, null] as const)
+            const labeledExpected =
+                expression.callee.name === 'adjust'
+                    ? ([null, 'towards'] as const)
+                    : ([null, 'by'] as const)
+
+            if (
+                !callArgumentLabelsMatch(expression, expectedLabels) &&
+                !callArgumentLabelsMatch(expression, labeledExpected)
+            ) {
+                return false
+            }
+
             return (
-                isTruthExpression(expression.arguments[0], variableKinds) &&
-                isTruthExpression(expression.arguments[1], variableKinds)
+                isTruthExpression(
+                    expression.arguments[0].value,
+                    variableKinds,
+                ) &&
+                isTruthExpression(expression.arguments[1].value, variableKinds)
             )
         }
         return false
@@ -716,7 +741,20 @@ function isTruthCallExpression(
             expression.callee.property === 'rotate') &&
         expression.arguments.length === 1
     ) {
-        return isTruthExpression(expression.arguments[0], variableKinds)
+        const expectedLabels =
+            expression.callee.property === 'adjust'
+                ? ([null] as const)
+                : ([null] as const)
+        const labeledExpected =
+            expression.callee.property === 'adjust'
+                ? (['towards'] as const)
+                : (['by'] as const)
+
+        return (
+            (callArgumentLabelsMatch(expression, expectedLabels) ||
+                callArgumentLabelsMatch(expression, labeledExpected)) &&
+            isTruthExpression(expression.arguments[0].value, variableKinds)
+        )
     }
 
     if (
@@ -823,16 +861,27 @@ function lowerTruthExpression(
                 expression.arguments.length === 2
             ) {
                 const a = lowerTruthExpression(
-                    expression.arguments[0],
+                    expression.arguments[0].value,
                     variableKinds,
                     nextTemp,
                 )
                 const b = lowerTruthExpression(
-                    expression.arguments[1],
+                    expression.arguments[1].value,
                     variableKinds,
                     nextTemp,
                 )
-                return lowerAdjustExpression(a, b, nextTemp)
+
+                if (callArgumentLabelsMatch(expression, [null, null])) {
+                    return lowerTruthRuntimeCall('adjust', [a, b], nextTemp)
+                }
+
+                if (callArgumentLabelsMatch(expression, [null, 'towards'])) {
+                    return lowerTruthRuntimeCall(
+                        'adjust__towards',
+                        [a, b],
+                        nextTemp,
+                    )
+                }
             }
 
             if (
@@ -840,16 +889,27 @@ function lowerTruthExpression(
                 expression.arguments.length === 2
             ) {
                 const a = lowerTruthExpression(
-                    expression.arguments[0],
+                    expression.arguments[0].value,
                     variableKinds,
                     nextTemp,
                 )
                 const by = lowerTruthExpression(
-                    expression.arguments[1],
+                    expression.arguments[1].value,
                     variableKinds,
                     nextTemp,
                 )
-                return lowerRotateExpression(a, by, nextTemp)
+
+                if (callArgumentLabelsMatch(expression, [null, null])) {
+                    return lowerTruthRuntimeCall('rotate', [a, by], nextTemp)
+                }
+
+                if (callArgumentLabelsMatch(expression, [null, 'by'])) {
+                    return lowerTruthRuntimeCall(
+                        'rotate__by',
+                        [a, by],
+                        nextTemp,
+                    )
+                }
             }
         }
 
@@ -865,11 +925,26 @@ function lowerTruthExpression(
                 expression.arguments.length === 1
             ) {
                 const target = lowerTruthExpression(
-                    expression.arguments[0],
+                    expression.arguments[0].value,
                     variableKinds,
                     nextTemp,
                 )
-                return lowerAdjustExpression(object, target, nextTemp)
+
+                if (callArgumentLabelsMatch(expression, [null])) {
+                    return lowerTruthRuntimeCall(
+                        'TruthValue·adjust',
+                        [object, target],
+                        nextTemp,
+                    )
+                }
+
+                if (callArgumentLabelsMatch(expression, ['towards'])) {
+                    return lowerTruthRuntimeCall(
+                        'TruthValue·adjust__towards',
+                        [object, target],
+                        nextTemp,
+                    )
+                }
             }
 
             if (
@@ -877,23 +952,35 @@ function lowerTruthExpression(
                 expression.arguments.length === 1
             ) {
                 const by = lowerTruthExpression(
-                    expression.arguments[0],
+                    expression.arguments[0].value,
                     variableKinds,
                     nextTemp,
                 )
-                return lowerRotateExpression(object, by, nextTemp)
+
+                if (callArgumentLabelsMatch(expression, [null])) {
+                    return lowerTruthRuntimeCall(
+                        'TruthValue·rotate',
+                        [object, by],
+                        nextTemp,
+                    )
+                }
+
+                if (callArgumentLabelsMatch(expression, ['by'])) {
+                    return lowerTruthRuntimeCall(
+                        'TruthValue·rotate__by',
+                        [object, by],
+                        nextTemp,
+                    )
+                }
             }
 
             if (
                 expression.callee.property === 'rotateUp' &&
                 expression.arguments.length === 0
             ) {
-                return lowerRotateExpression(
-                    object,
-                    {
-                        setup: [],
-                        value: { kind: 'CIntegerLiteral', value: '2' },
-                    },
+                return lowerTruthRuntimeCall(
+                    'TruthValue·rotateUp',
+                    [object],
                     nextTemp,
                 )
             }
@@ -902,12 +989,9 @@ function lowerTruthExpression(
                 expression.callee.property === 'rotateDown' &&
                 expression.arguments.length === 0
             ) {
-                return lowerRotateExpression(
-                    object,
-                    {
-                        setup: [],
-                        value: { kind: 'CIntegerLiteral', value: '0' },
-                    },
+                return lowerTruthRuntimeCall(
+                    'TruthValue·rotateDown',
+                    [object],
                     nextTemp,
                 )
             }
@@ -917,28 +1001,24 @@ function lowerTruthExpression(
     throw new Error('Unsupported truthvalue expression in this vertical slice')
 }
 
-function lowerAdjustExpression(
-    a: { setup: CStatement[]; value: CExpression },
-    b: { setup: CStatement[]; value: CExpression },
+function lowerTruthRuntimeCall(
+    callee: string,
+    args: Array<{ setup: CStatement[]; value: CExpression }>,
     nextTemp: () => string,
 ): { setup: CStatement[]; value: CExpression } {
     const temp = nextTemp()
-    const aCode = cExprCode(a.value)
-    const bCode = cExprCode(b.value)
 
     return {
         setup: [
-            ...a.setup,
-            ...b.setup,
+            ...args.flatMap((arg) => arg.setup),
             {
                 kind: 'CVariableDeclaration',
                 type: 'int',
                 name: temp,
                 initializer: {
-                    kind: 'CRawExpression',
-                    // direction: false(0)=down, ambiguous(1)=identity, true(2)=up
-                    // offset = b - 1 ∈ {-1,0,+1}; clamp result to [0,2]
-                    code: `((${aCode}) + (${bCode}) - 1 < 0 ? 0 : ((${aCode}) + (${bCode}) - 1 > 2 ? 2 : (${aCode}) + (${bCode}) - 1))`,
+                    kind: 'CCallExpression',
+                    callee,
+                    args: args.map((arg) => arg.value),
                 },
             },
         ],
@@ -946,31 +1026,16 @@ function lowerAdjustExpression(
     }
 }
 
-function lowerRotateExpression(
-    a: { setup: CStatement[]; value: CExpression },
-    by: { setup: CStatement[]; value: CExpression },
-    nextTemp: () => string,
-): { setup: CStatement[]; value: CExpression } {
-    const temp = nextTemp()
-    const aCode = cExprCode(a.value)
-    const byCode = cExprCode(by.value)
-
-    return {
-        setup: [
-            ...a.setup,
-            ...by.setup,
-            {
-                kind: 'CVariableDeclaration',
-                type: 'int',
-                name: temp,
-                initializer: {
-                    kind: 'CRawExpression',
-                    code: `(((${aCode}) + ((${byCode}) - 1) + 3) % 3)`,
-                },
-            },
-        ],
-        value: { kind: 'CIdentifier', name: temp },
-    }
+function callArgumentLabelsMatch(
+    expression: CallExpression,
+    expected: ReadonlyArray<string | null>,
+): boolean {
+    return (
+        expression.arguments.length === expected.length &&
+        expression.arguments.every(
+            (argument, index) => argument.label === expected[index],
+        )
+    )
 }
 
 function cExprCode(expression: CExpression): string {

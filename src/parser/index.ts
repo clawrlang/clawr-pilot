@@ -3,6 +3,7 @@ import type { Token } from '../lexer'
 import { positionedError } from '../lexer/positioned-error'
 import type {
     BinaryExpression,
+    CallArgument,
     CallExpression,
     Expression,
     ExpressionStatement,
@@ -339,13 +340,13 @@ export class Parser {
 
     parseCallExpression(callee: Expression): CallExpression {
         this.stream.expect('PUNCTUATION', '(')
-        const args: Expression[] = []
+        const args: CallArgument[] = []
 
         let next = this.stream.peek({ skippingNewline: true })
         if (!next) throw new Error('Unexpected EOF in call expression')
 
         while (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
-            args.push(this.parseExpression())
+            args.push(this.parseCallArgument())
             next = this.stream.peek({ skippingNewline: true })
             if (!next) throw new Error('Unexpected EOF in call expression')
 
@@ -371,6 +372,32 @@ export class Parser {
             kind: 'CallExpression',
             callee,
             arguments: args,
+        }
+    }
+
+    parseCallArgument(): CallArgument {
+        const probe = this.stream.clone()
+        const maybeLabel = probe.next({ skippingNewline: true })
+        const maybeColon = probe.peek({ skippingNewline: true })
+
+        if (
+            maybeLabel &&
+            maybeLabel.kind === 'IDENTIFIER' &&
+            maybeColon &&
+            maybeColon.kind === 'PUNCTUATION' &&
+            maybeColon.symbol === ':'
+        ) {
+            const label = this.stream.expect('IDENTIFIER').identifier
+            this.stream.expect('PUNCTUATION', ':')
+            return {
+                label,
+                value: this.parseExpression(),
+            }
+        }
+
+        return {
+            label: null,
+            value: this.parseExpression(),
         }
     }
 

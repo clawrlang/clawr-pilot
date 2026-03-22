@@ -96,6 +96,46 @@ describe('parser truthvalue literals', () => {
 })
 
 describe('parser truthvalue operators', () => {
+    it('parses labeled call arguments', () => {
+        const program = parseClawr(
+            'print(adjust(false, towards: true))',
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'ExpressionStatement',
+            expression: {
+                kind: 'CallExpression',
+                callee: { kind: 'Identifier', name: 'print' },
+                arguments: [
+                    {
+                        label: null,
+                        value: {
+                            kind: 'CallExpression',
+                            callee: { kind: 'Identifier', name: 'adjust' },
+                            arguments: [
+                                {
+                                    label: null,
+                                    value: {
+                                        kind: 'TruthLiteral',
+                                        value: 'false',
+                                    },
+                                },
+                                {
+                                    label: 'towards',
+                                    value: {
+                                        kind: 'TruthLiteral',
+                                        value: 'true',
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+            },
+        })
+    })
+
     it('parses unary !', () => {
         const program = parseClawr('const x = !ambiguous', 'test')
 
