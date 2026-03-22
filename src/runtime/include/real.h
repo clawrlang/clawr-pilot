@@ -2,15 +2,25 @@
 #define CLAWR_REAL_H
 
 #include "refc.h"
+#include "integer.h"
+#include <stdbool.h>
+#include <stdint.h>
 
-// Temporary representation layer for real values.
-// Uses long double for now while preserving source decimal strings.
+// Arbitrary-precision decimal real.
+// value = significand × 10^exponent10
+// Strings are only materialized on demand (toString / fromString boundaries).
 typedef struct Real {
     __rc_header header;
-    long double value;
-    char* canonical;
+    Integer* significand;
+    int32_t  exponent10;
+    uint32_t context_precision;
+    char*    string_cache;  // nullable; lazy-built by toString
+    bool     cache_valid;
 } Real;
 extern const __type_info Realˇtype;
+
+/// Default number of significant decimal digits for division results.
+#define CLAWR_REAL_DEFAULT_PRECISION 50
 
 Real* Real¸fromString(const char* value);
 const char* Real·toString(Real* self);

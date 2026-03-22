@@ -9,7 +9,7 @@
   - || = max
   - false < ambiguous < true
   - `!ambiguous == ambiguous`
-- `real` (current: `long double` runtime bootstrap, needs arbitrary-precision backend)
+- `real` (arbitrary-precision decimal; `Integer` significand + base-10 exponent; lazy string cache; `÷` limited to single-digit divisors until full `Integer¸divide` is implemented)
 - `string`
 - Lattices: Replace types with value-sets
   - enumerated (one or more distinct values)
