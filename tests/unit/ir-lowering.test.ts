@@ -101,4 +101,14 @@ describe('IR lowering snapshot', () => {
             /No method named rotateUp\(\)\./,
         )
     })
+
+    it('lists candidate signatures for unknown truthvalue free-function calls', () => {
+        const source =
+            'const f = false\nconst t = true\nprint(spin(f, by: t))\n'
+        const ast = parseClawr(source, 'test-unknown-truthvalue-function.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /No function named spin\(_:by:\)\. Candidates: .*adjust\(_:towards:\).*rotate\(_:by:\).*rotateUp\(_:\).*adjustDown\(_:\)\./,
+        )
+    })
 })

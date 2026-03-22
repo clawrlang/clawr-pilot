@@ -8,6 +8,7 @@ import {
     validateLabeledCall,
     mangleLabeledCallee,
     formatCallDisplayNameFromArguments,
+    formatCallableDisplayName,
 } from './callable-registry'
 import { cExprCode, cTruthValue } from './lowering-utils'
 import type { VariableKind } from './lowering-types'
@@ -77,6 +78,17 @@ const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
             },
         ],
     },
+}
+
+function formatTruthFunctionCandidates(): string {
+    const canonical = Object.values(TRUTH_CALLABLES.freeCalls).map((spec) =>
+        formatCallableDisplayName(spec.baseName, spec.canonicalLabels),
+    )
+    const aliases = Object.keys(TRUTH_FREE_ALIASES).map((name) =>
+        formatCallableDisplayName(name, [null]),
+    )
+
+    return [...canonical, ...aliases].join(', ')
 }
 
 export function isTruthExpression(
@@ -266,7 +278,7 @@ export function lowerTruthExpression(
             }
 
             throw new Error(
-                `No function named ${formatCallDisplayNameFromArguments(expression.callee.name, expression.arguments)}.`,
+                `No function named ${formatCallDisplayNameFromArguments(expression.callee.name, expression.arguments)}. Candidates: ${formatTruthFunctionCandidates()}.`,
             )
         }
 
