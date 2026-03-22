@@ -704,22 +704,6 @@ function isTruthCallExpression(
                 expression.callee.name === 'rotate') &&
             expression.arguments.length === 2
         ) {
-            const expectedLabels =
-                expression.callee.name === 'adjust'
-                    ? ([null, null] as const)
-                    : ([null, null] as const)
-            const labeledExpected =
-                expression.callee.name === 'adjust'
-                    ? ([null, 'towards'] as const)
-                    : ([null, 'by'] as const)
-
-            if (
-                !callArgumentLabelsMatch(expression, expectedLabels) &&
-                !callArgumentLabelsMatch(expression, labeledExpected)
-            ) {
-                return false
-            }
-
             return (
                 isTruthExpression(
                     expression.arguments[0].value,
@@ -733,28 +717,12 @@ function isTruthCallExpression(
 
     if (expression.callee.kind !== 'MemberExpression') return false
 
-    if (!isTruthExpression(expression.callee.object, variableKinds))
-        return false
-
     if (
         (expression.callee.property === 'adjust' ||
             expression.callee.property === 'rotate') &&
         expression.arguments.length === 1
     ) {
-        const expectedLabels =
-            expression.callee.property === 'adjust'
-                ? ([null] as const)
-                : ([null] as const)
-        const labeledExpected =
-            expression.callee.property === 'adjust'
-                ? (['towards'] as const)
-                : (['by'] as const)
-
-        return (
-            (callArgumentLabelsMatch(expression, expectedLabels) ||
-                callArgumentLabelsMatch(expression, labeledExpected)) &&
-            isTruthExpression(expression.arguments[0].value, variableKinds)
-        )
+        return isTruthExpression(expression.arguments[0].value, variableKinds)
     }
 
     if (
@@ -860,127 +828,66 @@ function lowerTruthExpression(
                 expression.callee.name === 'adjust' &&
                 expression.arguments.length === 2
             ) {
-                const a = lowerTruthExpression(
-                    expression.arguments[0].value,
+                return lowerValidatedTruthRuntimeCall(
+                    expression,
+                    truthCallSignature('adjust'),
+                    'adjust',
                     variableKinds,
                     nextTemp,
                 )
-                const b = lowerTruthExpression(
-                    expression.arguments[1].value,
-                    variableKinds,
-                    nextTemp,
-                )
-
-                if (callArgumentLabelsMatch(expression, [null, null])) {
-                    return lowerTruthRuntimeCall('adjust', [a, b], nextTemp)
-                }
-
-                if (callArgumentLabelsMatch(expression, [null, 'towards'])) {
-                    return lowerTruthRuntimeCall(
-                        'adjust__towards',
-                        [a, b],
-                        nextTemp,
-                    )
-                }
             }
 
             if (
                 expression.callee.name === 'rotate' &&
                 expression.arguments.length === 2
             ) {
-                const a = lowerTruthExpression(
-                    expression.arguments[0].value,
+                return lowerValidatedTruthRuntimeCall(
+                    expression,
+                    truthCallSignature('rotate'),
+                    'rotate',
                     variableKinds,
                     nextTemp,
                 )
-                const by = lowerTruthExpression(
-                    expression.arguments[1].value,
-                    variableKinds,
-                    nextTemp,
-                )
-
-                if (callArgumentLabelsMatch(expression, [null, null])) {
-                    return lowerTruthRuntimeCall('rotate', [a, by], nextTemp)
-                }
-
-                if (callArgumentLabelsMatch(expression, [null, 'by'])) {
-                    return lowerTruthRuntimeCall(
-                        'rotate__by',
-                        [a, by],
-                        nextTemp,
-                    )
-                }
             }
         }
 
         if (expression.callee.kind === 'MemberExpression') {
-            const object = lowerTruthExpression(
-                expression.callee.object,
-                variableKinds,
-                nextTemp,
-            )
-
             if (
                 expression.callee.property === 'adjust' &&
                 expression.arguments.length === 1
             ) {
-                const target = lowerTruthExpression(
-                    expression.arguments[0].value,
+                return lowerValidatedTruthMethodCall(
+                    expression,
+                    truthMethodSignature('adjust'),
+                    'adjust',
                     variableKinds,
                     nextTemp,
                 )
-
-                if (callArgumentLabelsMatch(expression, [null])) {
-                    return lowerTruthRuntimeCall(
-                        'TruthValue·adjust',
-                        [object, target],
-                        nextTemp,
-                    )
-                }
-
-                if (callArgumentLabelsMatch(expression, ['towards'])) {
-                    return lowerTruthRuntimeCall(
-                        'TruthValue·adjust__towards',
-                        [object, target],
-                        nextTemp,
-                    )
-                }
             }
 
             if (
                 expression.callee.property === 'rotate' &&
                 expression.arguments.length === 1
             ) {
-                const by = lowerTruthExpression(
-                    expression.arguments[0].value,
+                return lowerValidatedTruthMethodCall(
+                    expression,
+                    truthMethodSignature('rotate'),
+                    'rotate',
                     variableKinds,
                     nextTemp,
                 )
-
-                if (callArgumentLabelsMatch(expression, [null])) {
-                    return lowerTruthRuntimeCall(
-                        'TruthValue·rotate',
-                        [object, by],
-                        nextTemp,
-                    )
-                }
-
-                if (callArgumentLabelsMatch(expression, ['by'])) {
-                    return lowerTruthRuntimeCall(
-                        'TruthValue·rotate__by',
-                        [object, by],
-                        nextTemp,
-                    )
-                }
             }
 
             if (
                 expression.callee.property === 'rotateUp' &&
                 expression.arguments.length === 0
             ) {
-                return lowerTruthRuntimeCall(
-                    'TruthValue·rotateUp',
-                    [object],
+                return lowerExpandedTruthMethodCall(
+                    expression,
+                    'rotate',
+                    'by',
+                    { kind: 'TruthLiteral', value: 'true' },
+                    variableKinds,
                     nextTemp,
                 )
             }
@@ -989,9 +896,12 @@ function lowerTruthExpression(
                 expression.callee.property === 'rotateDown' &&
                 expression.arguments.length === 0
             ) {
-                return lowerTruthRuntimeCall(
-                    'TruthValue·rotateDown',
-                    [object],
+                return lowerExpandedTruthMethodCall(
+                    expression,
+                    'rotate',
+                    'by',
+                    { kind: 'TruthLiteral', value: 'false' },
+                    variableKinds,
                     nextTemp,
                 )
             }
@@ -1027,15 +937,144 @@ function lowerTruthRuntimeCall(
 }
 
 function callArgumentLabelsMatch(
-    expression: CallExpression,
+    arguments_: ReadonlyArray<CallExpression['arguments'][number]>,
     expected: ReadonlyArray<string | null>,
 ): boolean {
     return (
-        expression.arguments.length === expected.length &&
-        expression.arguments.every(
+        arguments_.length === expected.length &&
+        arguments_.every(
             (argument, index) => argument.label === expected[index],
         )
     )
+}
+
+function truthCallSignature(
+    name: 'adjust' | 'rotate',
+): ReadonlyArray<string | null> {
+    return name === 'adjust' ? [null, 'towards'] : [null, 'by']
+}
+
+function truthMethodSignature(
+    name: 'adjust' | 'rotate',
+): ReadonlyArray<string | null> {
+    return name === 'adjust' ? ['towards'] : ['by']
+}
+
+function lowerValidatedTruthRuntimeCall(
+    expression: CallExpression,
+    canonicalLabels: ReadonlyArray<string | null>,
+    baseName: string,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    validateLabeledCall(expression, canonicalLabels, baseName)
+
+    return lowerTruthRuntimeCall(
+        mangleLabeledCallee(baseName, canonicalLabels),
+        expression.arguments.map((argument) =>
+            lowerTruthExpression(argument.value, variableKinds, nextTemp),
+        ),
+        nextTemp,
+    )
+}
+
+function lowerValidatedTruthMethodCall(
+    expression: CallExpression,
+    canonicalLabels: ReadonlyArray<string | null>,
+    baseName: string,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    if (expression.callee.kind !== 'MemberExpression') {
+        throw new Error('Expected truthvalue method call')
+    }
+
+    validateLabeledCall(expression, canonicalLabels, baseName)
+
+    const object = lowerTruthExpression(
+        expression.callee.object,
+        variableKinds,
+        nextTemp,
+    )
+
+    return lowerTruthRuntimeCall(
+        mangleLabeledCallee(baseName, [null, ...canonicalLabels]),
+        [
+            object,
+            ...expression.arguments.map((argument) =>
+                lowerTruthExpression(argument.value, variableKinds, nextTemp),
+            ),
+        ],
+        nextTemp,
+    )
+}
+
+function lowerExpandedTruthMethodCall(
+    expression: CallExpression,
+    baseName: 'rotate',
+    label: 'by',
+    value: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real' | 'string'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    if (expression.callee.kind !== 'MemberExpression') {
+        throw new Error('Expected truthvalue method call')
+    }
+
+    const object = lowerTruthExpression(
+        expression.callee.object,
+        variableKinds,
+        nextTemp,
+    )
+    const arg = lowerTruthExpression(value, variableKinds, nextTemp)
+
+    return lowerTruthRuntimeCall(
+        mangleLabeledCallee(baseName, [null, label]),
+        [object, arg],
+        nextTemp,
+    )
+}
+
+function validateLabeledCall(
+    expression: CallExpression,
+    canonicalLabels: ReadonlyArray<string | null>,
+    baseName: string,
+) {
+    if (callArgumentLabelsMatch(expression.arguments, canonicalLabels)) {
+        return
+    }
+
+    if (
+        callArgumentLabelsMatch(
+            expression.arguments,
+            canonicalLabels.map(() => null),
+        )
+    ) {
+        return
+    }
+
+    const expected = canonicalLabels
+        .map((label, index) => {
+            if (label === null) {
+                return `argument ${index + 1} must be unlabeled`
+            }
+
+            return `argument ${index + 1} must be labeled ${label}:`
+        })
+        .join(', ')
+
+    throw new Error(`Invalid labels for ${baseName}(...): ${expected}`)
+}
+
+function mangleLabeledCallee(
+    baseName: string,
+    labels: ReadonlyArray<string | null>,
+): string {
+    if (labels.every((label) => label === null)) {
+        return baseName
+    }
+
+    return `${baseName}_${labels.map((label) => label ?? '').join('_')}`
 }
 
 function cExprCode(expression: CExpression): string {

@@ -41,6 +41,7 @@ describe('IR lowering snapshot', () => {
             'const t = true',
             'print(adjust(f, towards: t))',
             'print(f.rotate(by: t))',
+            'print(f.rotateUp())',
             '',
         ].join('\n')
         const ast = parseClawr(source, 'test-truthvalue-labels.clawr')
@@ -48,6 +49,17 @@ describe('IR lowering snapshot', () => {
         const serialized = JSON.stringify(ir)
 
         expect(serialized).toContain('adjust__towards')
-        expect(serialized).toContain('TruthValue·rotate__by')
+        expect(serialized).toContain('rotate__by')
+        expect(serialized).not.toContain('TruthValue·')
+    })
+
+    it('rejects invalid truthvalue argument labels', () => {
+        const source =
+            'const f = false\nconst t = true\nprint(adjust(f, by: t))\n'
+        const ast = parseClawr(source, 'test-invalid-truthvalue-labels.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /Invalid labels for adjust\(\.\.\.\): argument 1 must be unlabeled, argument 2 must be labeled towards:/,
+        )
     })
 })
