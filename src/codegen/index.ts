@@ -489,11 +489,11 @@ function lowerIntegerBinaryExpression(
         nextTemp,
     )
     const calleeMap: Record<string, string> = {
-        '+': 'Integer¸add_left_right',
-        '-': 'Integer¸subtract_left_right',
-        '*': 'Integer¸multiply_left_right',
-        '/': 'Integer¸divide_dividend_by',
-        '^': 'Integer¸power_base_exponent',
+        '+': 'Integer¸add',
+        '-': 'Integer¸subtract',
+        '*': 'Integer¸multiply',
+        '/': 'Integer¸divide',
+        '^': 'Integer¸power',
     }
     const callee = calleeMap[expression.operator]
     const temp = nextTemp()
@@ -590,11 +590,11 @@ function lowerRealBinaryExpression(
     const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
     const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
     const calleeMap: Record<string, string> = {
-        '+': 'Real¸add_left_right',
-        '-': 'Real¸subtract_left_right',
-        '*': 'Real¸multiply_left_right',
-        '/': 'Real¸divide_dividend_by',
-        '^': 'Real¸power_base_exponent',
+        '+': 'Real¸add',
+        '-': 'Real¸subtract',
+        '*': 'Real¸multiply',
+        '/': 'Real¸divide',
+        '^': 'Real¸power',
     }
     const callee = calleeMap[expression.operator]
     const temp = nextTemp()

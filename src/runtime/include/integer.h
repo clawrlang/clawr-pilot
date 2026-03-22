@@ -63,20 +63,20 @@ void printDigits(Integer* integer);
 digit_t Integer·divide(Integer *dividend, digit_t divisor);
 
 /// @brief Add two integers, returning a new owned result
-Integer* Integer¸add_left_right(Integer* left, Integer* right);
+Integer* Integer¸add(Integer* left, Integer* right);
 
 /// @brief Subtract right from left, returning a new owned result
-Integer* Integer¸subtract_left_right(Integer* left, Integer* right);
+Integer* Integer¸subtract(Integer* left, Integer* right);
 
 /// @brief Multiply two integers using grade-school algorithm
-Integer* Integer¸multiply_left_right(Integer* left, Integer* right);
+Integer* Integer¸multiply(Integer* left, Integer* right);
 
 /// @brief Divide dividend by divisor (truncated toward zero), returning quotient.
 /// Panics on division by zero. Panics if divisor exceeds a single balanced digit.
-Integer* Integer¸divide_dividend_by(Integer* dividend, Integer* divisor);
+Integer* Integer¸divide(Integer* dividend, Integer* divisor);
 
 /// @brief Raise base to a non-negative integer exponent using binary exponentiation.
 /// Panics if exponent is negative.
-Integer* Integer¸power_base_exponent(Integer* base, Integer* exponent);
+Integer* Integer¸power(Integer* base, Integer* exponent);
 
 #endif // BIG_INTEGER_H

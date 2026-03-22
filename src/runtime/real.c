@@ -93,23 +93,23 @@ static Real* createFromLongDouble(long double value) {
     return real;
 }
 
-Real* Real¸add_left_right(Real* left, Real* right) {
+Real* Real¸add(Real* left, Real* right) {
     return createFromLongDouble(left->value + right->value);
 }
 
-Real* Real¸subtract_left_right(Real* left, Real* right) {
+Real* Real¸subtract(Real* left, Real* right) {
     return createFromLongDouble(left->value - right->value);
 }
 
-Real* Real¸multiply_left_right(Real* left, Real* right) {
+Real* Real¸multiply(Real* left, Real* right) {
     return createFromLongDouble(left->value * right->value);
 }
 
-Real* Real¸divide_dividend_by(Real* dividend, Real* divisor) {
+Real* Real¸divide(Real* dividend, Real* divisor) {
     if (divisor->value == 0.0L) panic("Division by zero!");
     return createFromLongDouble(dividend->value / divisor->value);
 }
 
-Real* Real¸power_base_exponent(Real* base, Real* exponent) {
+Real* Real¸power(Real* base, Real* exponent) {
     return createFromLongDouble(powl(base->value, exponent->value));
 }

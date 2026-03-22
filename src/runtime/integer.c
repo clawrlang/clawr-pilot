@@ -390,21 +390,21 @@ static void balancedDecompose(__int128_t value, digit_t* digit_out, __int128_t* 
 // Non-mutating binary operations
 // ---------------------------------------------------------------------------
 
-Integer* Integer¸add_left_right(Integer* left, Integer* right) {
+Integer* Integer¸add(Integer* left, Integer* right) {
     Integer* result = copyInteger(left);
     Integer·increment(result, right);
     trimLeadingZeros(result);
     return result;
 }
 
-Integer* Integer¸subtract_left_right(Integer* left, Integer* right) {
+Integer* Integer¸subtract(Integer* left, Integer* right) {
     Integer* result = copyInteger(left);
     Integer·decrement(result, right);
     trimLeadingZeros(result);
     return result;
 }
 
-Integer* Integer¸multiply_left_right(Integer* left, Integer* right) {
+Integer* Integer¸multiply(Integer* left, Integer* right) {
     size_t n = effectiveLength(left);
     size_t m = effectiveLength(right);
     if (n == 0 || m == 0) return retainRC(&Integer¸zero);
@@ -438,7 +438,7 @@ Integer* Integer¸multiply_left_right(Integer* left, Integer* right) {
     return result;
 }
 
-Integer* Integer¸divide_dividend_by(Integer* dividend, Integer* divisor) {
+Integer* Integer¸divide(Integer* dividend, Integer* divisor) {
     size_t m = effectiveLength(divisor);
     if (m == 0) panic("Division by zero!");
     if (effectiveLength(dividend) == 0) return retainRC(&Integer¸zero);
@@ -455,7 +455,7 @@ Integer* Integer¸divide_dividend_by(Integer* dividend, Integer* divisor) {
     return result;
 }
 
-Integer* Integer¸power_base_exponent(Integer* base, Integer* exponent) {
+Integer* Integer¸power(Integer* base, Integer* exponent) {
     if (integerSign(exponent) < 0)
         panic("Integer exponentiation requires a non-negative exponent");
 
@@ -474,13 +474,13 @@ Integer* Integer¸power_base_exponent(Integer* base, Integer* exponent) {
         trimLeadingZeros(exp_rem);
 
         if (bit != 0) {
-            Integer* new_result = Integer¸multiply_left_right(result, b);
+            Integer* new_result = Integer¸multiply(result, b);
             releaseRC(result);
             result = new_result;
         }
 
         if (effectiveLength(exp_rem) > 0) {
-            Integer* new_b = Integer¸multiply_left_right(b, b);
+            Integer* new_b = Integer¸multiply(b, b);
             releaseRC(b);
             b = new_b;
         }
