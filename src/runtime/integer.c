@@ -2,6 +2,9 @@
 #include "array.h"
 #include "panic.h"
 #include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define INVALID_DIGIT (DIGIT_MIN - 1)
 
@@ -145,7 +148,7 @@ typedef struct TrillList {
     struct TrillList* next;
 } TrillList;
 
-const char* Integer·toString(Integer* self) {
+static char* integerToCString(Integer* self) {
     Integer* rem = retainRC(self);
     mutateRC(rem);
 
@@ -195,6 +198,17 @@ const char* Integer·toString(Integer* self) {
     }
 
     return result;
+}
+
+String* Integer·toStringRC(Integer* self) {
+    char* cstr = integerToCString(self);
+    String* s = String¸fromCString(cstr);
+    free(cstr);
+    return s;
+}
+
+const char* Integer·toString(Integer* self) {
+    return integerToCString(self);
 }
 
 void Integer·toggleSign(Integer* const self) {

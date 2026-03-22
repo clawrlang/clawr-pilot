@@ -3,6 +3,7 @@
 
 #include "refc.h"
 #include "integer.h"
+#include "clawr_string.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -14,7 +15,7 @@ typedef struct Real {
     Integer* significand;
     int32_t  exponent10;
     uint32_t context_precision;
-    char*    string_cache;  // nullable; lazy-built by toString
+    String*  string_cache;  // nullable; lazy-built by toStringRC
     bool     cache_valid;
 } Real;
 extern const __type_info Realˇtype;
@@ -23,6 +24,7 @@ extern const __type_info Realˇtype;
 #define CLAWR_REAL_DEFAULT_PRECISION 50
 
 Real* Real¸fromString(const char* value);
+String* Real·toStringRC(Real* self);
 const char* Real·toString(Real* self);
 Real* Real¸add(Real* left, Real* right);
 Real* Real¸subtract(Real* left, Real* right);

@@ -18,10 +18,7 @@ static void retainNestedFields(void* self) {
 static void releaseNestedFields(void* self) {
     Real* real = (Real*) self;
     releaseRC(real->significand);
-    if (real->string_cache) {
-        free(real->string_cache);
-        real->string_cache = NULL;
-    }
+    if (real->string_cache) releaseRC(real->string_cache);
 }
 
 const __type_info Realˇtype = {
@@ -144,22 +141,20 @@ static char* cloneString(const char* s) {
 }
 
 // Build decimal string from significand + exponent10.
-// Returns a heap-allocated, caller-owned string.
-static char* formatReal(Integer* sig, int32_t exp) {
+// Returns an owned String object.
+static String* formatReal(Integer* sig, int32_t exp) {
     // Get the absolute decimal digit string from Integer·toString.
     // Integer·toString includes a leading '-' for negatives.
-    const char* raw = Integer·toString(sig);
+    String* rawString = Integer·toStringRC(sig);
+    const char* raw = String·toCString(rawString);
     bool negative = (raw[0] == '-');
     const char* digits = negative ? raw + 1 : raw;
     size_t ndigits = strlen(digits);
 
     // Handle zero specially.
     if (ndigits == 0 || (ndigits == 1 && digits[0] == '0')) {
-        free((void*) raw);
-        char* out = malloc(4);
-        if (!out) panic("Out of memory in Real formatter");
-        strcpy(out, "0.0");
-        return out;
+        releaseRC(rawString);
+        return String¸fromCString("0.0");
     }
 
     // The value is:  digits * 10^exp
@@ -202,8 +197,10 @@ static char* formatReal(Integer* sig, int32_t exp) {
     }
     *p = '\0';
 
-    free((void*) raw);
-    return out;
+    String* result = String¸fromCString(out);
+    free(out);
+    releaseRC(rawString);
+    return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +275,7 @@ Real* Real¸fromString(const char* value) {
     real->significand       = sig;
     real->exponent10        = exp;
     real->context_precision = CLAWR_REAL_DEFAULT_PRECISION;
-    real->string_cache      = cloneString(stripped);  // pre-populate from source
+    real->string_cache      = String¸fromCString(stripped);  // pre-populate from source
     real->cache_valid       = true;
 
     free(digits_buf);
@@ -290,13 +287,20 @@ Real* Real¸fromString(const char* value) {
 // toString
 // ---------------------------------------------------------------------------
 
-const char* Real·toString(Real* self) {
+String* Real·toStringRC(Real* self) {
     if (!self->cache_valid) {
-        if (self->string_cache) free(self->string_cache);
+        if (self->string_cache) releaseRC(self->string_cache);
         self->string_cache = formatReal(self->significand, self->exponent10);
         self->cache_valid  = true;
     }
-    return cloneString(self->string_cache);
+    return retainRC(self->string_cache);
+}
+
+const char* Real·toString(Real* self) {
+    String* s = Real·toStringRC(self);
+    const char* out = cloneString(String·toCString(s));
+    releaseRC(s);
+    return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -421,11 +425,12 @@ Real* Real¸power(Real* base, Real* exponent) {
     }
 
     // Convert exponent to unsigned long long via toString (safe for practical sizes).
-    const char* exp_str = Integer·toString(int_exp);
+    String* exp_str_obj = Integer·toStringRC(int_exp);
+    const char* exp_str = String·toCString(exp_str_obj);
     releaseRC(int_exp);
     char* end;
     unsigned long long e = strtoull(exp_str, &end, 10);
-    free((void*) exp_str);
+    releaseRC(exp_str_obj);
     if (*end != '\0') panic("Real exponent too large");
 
     // Binary exponentiation.

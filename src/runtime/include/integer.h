@@ -3,6 +3,7 @@
 
 #include "refc.h"
 #include "array.h"
+#include "clawr_string.h"
 #include <stdlib.h>
 
 #define DIGIT_MAX INT64_MAX
@@ -51,6 +52,12 @@ void Integer·increment(Integer* const self, Integer* const addend);
 void Integer·decrement(Integer* const self, Integer* const subtrahend);
 
 /// @brief Convert Integer to its decimal representation
+/// @param self the integer to convert
+/// @return an owned String object
+String* Integer·toStringRC(Integer* self);
+
+/// @brief Compatibility wrapper returning a caller-owned C string.
+/// Prefer Integer·toStringRC for new code.
 /// @param self the integer to convert
 /// @return the decimal representation
 const char* Integer·toString(Integer* self);

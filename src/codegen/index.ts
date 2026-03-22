@@ -325,19 +325,13 @@ function lowerPrintCall(
             args: [{ kind: 'CStringLiteral', value: '%s\n' }, render.value],
         },
     })
-    if (render.freeAfterUse) {
+    if (render.releaseAfterUse) {
         statements.push({
             kind: 'CExpressionStatement',
             expression: {
                 kind: 'CCallExpression',
-                callee: 'free',
-                args: [
-                    {
-                        kind: 'CCastExpression',
-                        typeName: 'void*',
-                        expression: render.value,
-                    },
-                ],
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: render.releaseAfterUse }],
             },
         })
     }
@@ -347,7 +341,7 @@ function lowerStringExpression(
     expression: Expression,
     variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
     nextTemp: () => string,
-): { setup: CStatement[]; value: CExpression; freeAfterUse: boolean } {
+): { setup: CStatement[]; value: CExpression; releaseAfterUse?: string } {
     if (expression.kind === 'TruthLiteral') {
         return {
             setup: [],
@@ -355,7 +349,6 @@ function lowerStringExpression(
                 kind: 'CStringLiteral',
                 value: expression.value,
             },
-            freeAfterUse: false,
         }
     }
 
@@ -368,7 +361,6 @@ function lowerStringExpression(
                     kind: 'CRawExpression',
                     code: `(${expression.name} == 0 ? "false" : (${expression.name} == 2 ? "true" : "ambiguous"))`,
                 },
-                freeAfterUse: false,
             }
         }
     }
@@ -386,7 +378,6 @@ function lowerStringExpression(
                 kind: 'CRawExpression',
                 code: `(${code} == 0 ? "false" : (${code} == 2 ? "true" : "ambiguous"))`,
             },
-            freeAfterUse: false,
         }
     }
 
@@ -404,33 +395,49 @@ function lowerStringExpression(
             }
 
             const variableKind = variableKinds.get(object.name)
-            let toStringCallee: 'Integer·toString' | 'Real·toString'
+            let toStringCallee: 'Integer·toStringRC' | 'Real·toStringRC'
             if (variableKind === 'integer') {
-                toStringCallee = 'Integer·toString'
+                toStringCallee = 'Integer·toStringRC'
             } else if (variableKind === 'real') {
-                toStringCallee = 'Real·toString'
+                toStringCallee = 'Real·toStringRC'
             } else {
                 throw new Error(
                     'toString() is currently supported only for integer and real variables',
                 )
             }
 
-            const temp = nextTemp()
+            const stringObjectTemp = nextTemp()
+            const cStringTemp = nextTemp()
             return {
                 setup: [
                     {
                         kind: 'CVariableDeclaration',
-                        type: 'const char*',
-                        name: temp,
+                        type: 'String*',
+                        name: stringObjectTemp,
                         initializer: {
                             kind: 'CCallExpression',
                             callee: toStringCallee,
                             args: [{ kind: 'CIdentifier', name: object.name }],
                         },
                     },
+                    {
+                        kind: 'CVariableDeclaration',
+                        type: 'const char*',
+                        name: cStringTemp,
+                        initializer: {
+                            kind: 'CCallExpression',
+                            callee: 'String·toCString',
+                            args: [
+                                {
+                                    kind: 'CIdentifier',
+                                    name: stringObjectTemp,
+                                },
+                            ],
+                        },
+                    },
                 ],
-                value: { kind: 'CIdentifier', name: temp },
-                freeAfterUse: true,
+                value: { kind: 'CIdentifier', name: cStringTemp },
+                releaseAfterUse: stringObjectTemp,
             }
         }
     }

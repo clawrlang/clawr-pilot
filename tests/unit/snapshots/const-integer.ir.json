@@ -1,10 +1,6 @@
 {
   "kind": "CTranslationUnit",
-  "includes": [
-    "\"runtime.h\"",
-    "<stdio.h>",
-    "<stdlib.h>"
-  ],
+  "includes": ["\"runtime.h\"", "<stdio.h>", "<stdlib.h>"],
   "functions": [
     {
       "kind": "CFunction",
@@ -112,15 +108,30 @@
         },
         {
           "kind": "CVariableDeclaration",
-          "type": "const char*",
+          "type": "String*",
           "name": "__clawr_tmp0",
           "initializer": {
             "kind": "CCallExpression",
-            "callee": "Integer·toString",
+            "callee": "Integer·toStringRC",
             "args": [
               {
                 "kind": "CIdentifier",
                 "name": "x"
+              }
+            ]
+          }
+        },
+        {
+          "kind": "CVariableDeclaration",
+          "type": "const char*",
+          "name": "__clawr_tmp1",
+          "initializer": {
+            "kind": "CCallExpression",
+            "callee": "String·toCString",
+            "args": [
+              {
+                "kind": "CIdentifier",
+                "name": "__clawr_tmp0"
               }
             ]
           }
@@ -137,7 +148,7 @@
               },
               {
                 "kind": "CIdentifier",
-                "name": "__clawr_tmp0"
+                "name": "__clawr_tmp1"
               }
             ]
           }
@@ -146,15 +157,11 @@
           "kind": "CExpressionStatement",
           "expression": {
             "kind": "CCallExpression",
-            "callee": "free",
+            "callee": "releaseRC",
             "args": [
               {
-                "kind": "CCastExpression",
-                "typeName": "void*",
-                "expression": {
-                  "kind": "CIdentifier",
-                  "name": "__clawr_tmp0"
-                }
+                "kind": "CIdentifier",
+                "name": "__clawr_tmp0"
               }
             ]
           }

@@ -2,6 +2,11 @@
 
 - `real` (arbitrary-precision decimal; `Integer` significand + base-10 exponent; lazy string cache; `÷` limited to single-digit divisors until full `Integer¸divide` is implemented)
 - `string`
+  - Can be used to simplify `Real` and `Integer` runtime implementation.
+  - Lots of `char*` references can be replaced by `String*`
+  - Use `releaseRC()` and (perhaps) implement `void (*retain_nested_fields)(void* self)`,
+    `void (*release_nested_fields)(void* self)` instead of explicitly calling `free()`.
+  - Runtime foundation started: `String*` type added with RC lifecycle, and codegen print/toString flow now retains/releases `String*` instead of manual `free()`.
 - Lattices: Replace types with value-sets
   - enumerated (one or more distinct values)
   - ranges (minimum and inclusive or exclusive maximum)
