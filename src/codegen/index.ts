@@ -215,6 +215,23 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (isTruthExpression(statement.initializer, variableKinds)) {
+        const lowered = lowerTruthExpression(
+            statement.initializer,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'int',
+            name: statement.identifier.name,
+            initializer: lowered.value,
+        })
+        variableKinds.set(statement.identifier.name, 'truthvalue')
+        return
+    }
+
     if (statement.initializer.kind === 'RealLiteral') {
         statements.push({
             kind: 'CVariableDeclaration',
@@ -356,6 +373,23 @@ function lowerStringExpression(
         }
     }
 
+    if (isTruthExpression(expression, variableKinds)) {
+        const lowered = lowerTruthExpression(
+            expression,
+            variableKinds,
+            nextTemp,
+        )
+        const code = cExprCode(lowered.value)
+        return {
+            setup: lowered.setup,
+            value: {
+                kind: 'CRawExpression',
+                code: `(${code} == 0 ? "false" : (${code} == 2 ? "true" : "ambiguous"))`,
+            },
+            freeAfterUse: false,
+        }
+    }
+
     if (expression.kind === 'CallExpression') {
         if (
             expression.callee.kind === 'MemberExpression' &&
@@ -417,6 +451,7 @@ function isIntegerExpression(
             return variableKinds.get(expression.name) === 'integer'
         case 'BinaryExpression':
             return (
+                ['+', '-', '*', '/', '^'].includes(expression.operator) &&
                 isIntegerExpression(expression.left, variableKinds) &&
                 isIntegerExpression(expression.right, variableKinds)
             )
@@ -529,12 +564,135 @@ function isRealExpression(
             return variableKinds.get(expression.name) === 'real'
         case 'BinaryExpression':
             return (
+                ['+', '-', '*', '/', '^'].includes(expression.operator) &&
                 isRealExpression(expression.left, variableKinds) &&
                 isRealExpression(expression.right, variableKinds)
             )
         default:
             return false
     }
+}
+
+function isTruthExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+): boolean {
+    switch (expression.kind) {
+        case 'TruthLiteral':
+            return true
+        case 'Identifier':
+            return variableKinds.get(expression.name) === 'truthvalue'
+        case 'UnaryExpression':
+            return (
+                expression.operator === '!' &&
+                isTruthExpression(expression.operand, variableKinds)
+            )
+        case 'BinaryExpression':
+            return (
+                (expression.operator === '&&' ||
+                    expression.operator === '||') &&
+                isTruthExpression(expression.left, variableKinds) &&
+                isTruthExpression(expression.right, variableKinds)
+            )
+        default:
+            return false
+    }
+}
+
+function lowerTruthExpression(
+    expression: Expression,
+    variableKinds: Map<string, 'integer' | 'truthvalue' | 'real'>,
+    nextTemp: () => string,
+): { setup: CStatement[]; value: CExpression } {
+    if (expression.kind === 'TruthLiteral') {
+        return {
+            setup: [],
+            value: {
+                kind: 'CIntegerLiteral',
+                value: cTruthValue(expression.value),
+            },
+        }
+    }
+
+    if (
+        expression.kind === 'Identifier' &&
+        variableKinds.get(expression.name) === 'truthvalue'
+    ) {
+        return {
+            setup: [],
+            value: { kind: 'CIdentifier', name: expression.name },
+        }
+    }
+
+    if (expression.kind === 'UnaryExpression' && expression.operator === '!') {
+        const operand = lowerTruthExpression(
+            expression.operand,
+            variableKinds,
+            nextTemp,
+        )
+        const temp = nextTemp()
+        return {
+            setup: [
+                ...operand.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'int',
+                    name: temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code: `(2 - ${cExprCode(operand.value)})`,
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+        }
+    }
+
+    if (expression.kind === 'BinaryExpression') {
+        const left = lowerTruthExpression(
+            expression.left,
+            variableKinds,
+            nextTemp,
+        )
+        const right = lowerTruthExpression(
+            expression.right,
+            variableKinds,
+            nextTemp,
+        )
+        const temp = nextTemp()
+        const leftCode = cExprCode(left.value)
+        const rightCode = cExprCode(right.value)
+        const code =
+            expression.operator === '&&'
+                ? `((${leftCode}) < (${rightCode}) ? (${leftCode}) : (${rightCode}))`
+                : `((${leftCode}) > (${rightCode}) ? (${leftCode}) : (${rightCode}))`
+
+        return {
+            setup: [
+                ...left.setup,
+                ...right.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'int',
+                    name: temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code,
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+        }
+    }
+
+    throw new Error('Unsupported truthvalue expression in this vertical slice')
+}
+
+function cExprCode(expression: CExpression): string {
+    if (expression.kind === 'CIdentifier') return expression.name
+    if (expression.kind === 'CIntegerLiteral') return expression.value
+    if (expression.kind === 'CRawExpression') return expression.code
+    throw new Error('Unsupported C expression shape for truthvalue lowering')
 }
 
 function lowerRealExpression(

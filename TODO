@@ -1,7 +1,7 @@
 # TODO
 
 - `truthvalue` operators
-  - `&&`, `||`, `!`
+  - `&&`, `||`, `!` ✅
   - `adjust(a, towards: b)` + monadic versions
   - `rotate(a, by: b)` + monadic versions (`rotateUp()` a.k.a. `rotate(by: true)` and `rotateDown()`)
   - Runtime: Should false = -1, true = +1? Or false = 0b00, true = 0b11? 0b01 AND 0b10 could both be considered ambiguous.

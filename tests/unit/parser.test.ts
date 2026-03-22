@@ -95,6 +95,62 @@ describe('parser truthvalue literals', () => {
     })
 })
 
+describe('parser truthvalue operators', () => {
+    it('parses unary !', () => {
+        const program = parseClawr('const x = !ambiguous', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'UnaryExpression',
+                operator: '!',
+                operand: {
+                    kind: 'TruthLiteral',
+                    value: 'ambiguous',
+                },
+            },
+        })
+    })
+
+    it('&& binds tighter than ||', () => {
+        const program = parseClawr(
+            'const x = false || ambiguous && true',
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '||',
+                left: { kind: 'TruthLiteral', value: 'false' },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '&&',
+                },
+            },
+        })
+    })
+
+    it('! binds tighter than &&', () => {
+        const program = parseClawr('const x = !false && true', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '&&',
+                left: {
+                    kind: 'UnaryExpression',
+                    operator: '!',
+                    operand: { kind: 'TruthLiteral', value: 'false' },
+                },
+                right: { kind: 'TruthLiteral', value: 'true' },
+            },
+        })
+    })
+})
+
 describe('parser real literals', () => {
     it('parses real declaration with grouped digits', () => {
         const program = parseClawr('const pi = 3.141_592_653', 'test')

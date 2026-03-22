@@ -24,6 +24,7 @@ export type Expression =
     | IntegerLiteralExpression
     | RealLiteralExpression
     | TruthLiteralExpression
+    | UnaryExpression
     | BinaryExpression
     | MemberExpression
     | CallExpression
@@ -50,9 +51,15 @@ export interface TruthLiteralExpression {
 
 export interface BinaryExpression {
     kind: 'BinaryExpression'
-    operator: '+' | '-' | '*' | '/' | '^'
+    operator: '+' | '-' | '*' | '/' | '^' | '&&' | '||'
     left: Expression
     right: Expression
+}
+
+export interface UnaryExpression {
+    kind: 'UnaryExpression'
+    operator: '!'
+    operand: Expression
 }
 
 export interface MemberExpression {

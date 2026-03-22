@@ -13,6 +13,7 @@ import type {
     RealLiteralExpression,
     Statement,
     TruthLiteralExpression,
+    UnaryExpression,
     VariableDeclaration,
     VariableSemantics,
 } from '../ast'
@@ -102,6 +103,52 @@ export class Parser {
     }
 
     parseExpression(): Expression {
+        return this.parseLogicalOrExpression()
+    }
+
+    parseLogicalOrExpression(): Expression {
+        let expr = this.parseLogicalAndExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (token && token.kind === 'OPERATOR' && token.operator === '||') {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseLogicalAndExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: '||',
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseLogicalAndExpression(): Expression {
+        let expr = this.parseAdditiveExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (token && token.kind === 'OPERATOR' && token.operator === '&&') {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseAdditiveExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: '&&',
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseAdditiveExpression(): Expression {
         let expr = this.parseMultiplicativeExpression()
 
         while (true) {
@@ -152,7 +199,7 @@ export class Parser {
     }
 
     parseExponentiationExpression(): Expression {
-        const base = this.parsePostfixExpression()
+        const base = this.parseUnaryExpression()
 
         const token = this.stream.peek({ skippingNewline: true })
         if (token && token.kind === 'OPERATOR' && token.operator === '^') {
@@ -168,6 +215,27 @@ export class Parser {
         }
 
         return base
+    }
+
+    parseUnaryExpression(): Expression {
+        const token = this.stream.peek({ skippingNewline: true })
+        if (!token) throw new Error('Unexpected EOF while parsing expression')
+
+        if (token.kind === 'OPERATOR' && token.operator === '!') {
+            this.stream.next({ skippingNewline: true })
+            return {
+                kind: 'UnaryExpression',
+                operator: '!',
+                operand: this.parseUnaryExpression(),
+            } satisfies UnaryExpression
+        }
+
+        if (token.kind === 'OPERATOR' && token.operator === '-') {
+            this.stream.next({ skippingNewline: true })
+            return this.parseNegatedPrimary(token)
+        }
+
+        return this.parsePostfixExpression()
     }
 
     parsePostfixExpression(): Expression {
@@ -200,10 +268,6 @@ export class Parser {
     parsePrimary(): Expression {
         const token = this.stream.next({ skippingNewline: true })
         if (!token) throw new Error('Unexpected EOF while parsing expression')
-
-        if (token.kind === 'OPERATOR' && token.operator === '-') {
-            return this.parseNegatedPrimary(token)
-        }
 
         if (token.kind === 'IDENTIFIER') {
             return {
