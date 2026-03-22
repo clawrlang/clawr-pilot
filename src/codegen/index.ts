@@ -6,7 +6,6 @@ import type {
     VariableDeclaration,
 } from '../ast'
 import {
-    emitC,
     type CExpression,
     type CStatement,
     type CTranslationUnit,
@@ -17,10 +16,6 @@ import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
 import { isRealExpression, lowerRealExpression } from './real-lowering'
 import { lowerPrintCall } from './string-lowering'
-
-export function generateC(program: Program): string {
-    return emitC(lowerToCIr(program))
-}
 
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
