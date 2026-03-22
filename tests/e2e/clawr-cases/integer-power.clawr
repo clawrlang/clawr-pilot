@@ -1,4 +1,0 @@
-const a = 2
-const b = 10
-const c = a ^ b
-print(c.toString())

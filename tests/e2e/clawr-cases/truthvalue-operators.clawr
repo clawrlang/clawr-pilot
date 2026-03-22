@@ -1,8 +1,0 @@
-const a = false
-const b = ambiguous
-const c = true
-
-print(a || b && c)
-print(!a)
-print(!b)
-print(!c)
