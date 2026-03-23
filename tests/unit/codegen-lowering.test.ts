@@ -3,6 +3,23 @@ import { parseClawr } from '../../src/parser'
 import { lowerToCIr } from '../../src/codegen'
 
 describe('codegen lowering behavior', () => {
+    it('lowers tritfield constructor with canonical lane encoding', () => {
+        const source = [
+            'const a = tritfield("0?1")',
+            'const b = tritfield("1?0")',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-tritfield-constructor-lowering.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        // Canonical mapping uses 0->00, ?->01, 1->11 on each lane.
+        expect(serialized).toContain('7ULL')
+        expect(serialized).toContain('52ULL')
+    })
+
     it('lowers bitfield constructor and lane operators', () => {
         const source = [
             'const a = bitfield("1010")',

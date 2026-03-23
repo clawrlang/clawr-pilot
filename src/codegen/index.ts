@@ -20,6 +20,10 @@ import {
     isBitfieldExpression,
     lowerBitfieldExpression,
 } from './bitfield-lowering'
+import {
+    isTritfieldExpression,
+    lowerTritfieldExpression,
+} from './tritfield-lowering'
 
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
@@ -318,8 +322,24 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (isTritfieldExpression(statement.initializer, variableKinds)) {
+        const lowered = lowerTritfieldExpression(
+            statement.initializer,
+            variableKinds,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'unsigned long long',
+            name: statement.identifier.name,
+            initializer: lowered.value,
+        })
+        variableKinds.set(statement.identifier.name, 'tritfield')
+        return
+    }
+
     throw new Error(
-        'Only integer, truthvalue, real, string, and bitfield variable initializers are supported in this vertical slice',
+        'Only integer, truthvalue, real, string, bitfield, and tritfield variable initializers are supported in this vertical slice',
     )
 }
 

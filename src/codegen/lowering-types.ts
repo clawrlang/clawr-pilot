@@ -4,3 +4,4 @@ export type VariableKind =
     | 'real'
     | 'string'
     | 'bitfield'
+    | 'tritfield'
