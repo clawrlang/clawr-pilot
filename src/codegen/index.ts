@@ -2,6 +2,7 @@ import type {
     CallExpression,
     Expression,
     ExpressionStatement,
+    IfStatement,
     Program,
     VariableDeclaration,
 } from '../ast'
@@ -11,7 +12,7 @@ import {
     type CTranslationUnit,
 } from '../ir/c'
 import type { RuntimeType } from './lowering-types'
-import { cTruthValue } from './lowering-utils'
+import { cExprCode, cTruthValue } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
 import { isRealExpression, lowerRealExpression } from './real-lowering'
@@ -151,6 +152,18 @@ function lowerStatement(
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
+    if (statement.kind === 'IfStatement') {
+        lowerIfStatement(
+            statement,
+            statements,
+            variableKinds,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
+
     if (statement.kind === 'VariableDeclaration') {
         lowerVariableDeclaration(
             statement,
@@ -172,6 +185,92 @@ function lowerStatement(
         bitfieldLengths,
         nextTemp,
     )
+}
+
+function lowerIfStatement(
+    statement: IfStatement,
+    statements: CStatement[],
+    variableKinds: Map<string, RuntimeType>,
+    tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
+    nextTemp: () => string,
+) {
+    if (!isTruthExpression(statement.predicate, variableKinds)) {
+        throw new Error(
+            'if predicate must be a truthvalue expression in this vertical slice',
+        )
+    }
+
+    const loweredPredicate = lowerTruthExpression(
+        statement.predicate,
+        variableKinds,
+        nextTemp,
+    )
+
+    const thenStatements: CStatement[] = []
+    const thenHeapLocals: string[] = []
+    const thenKinds = new Map(variableKinds)
+    const thenTritfieldLengths = new Map(tritfieldLengths)
+    const thenBitfieldLengths = new Map(bitfieldLengths)
+    for (const nested of statement.thenStatements) {
+        lowerStatement(
+            nested,
+            thenStatements,
+            thenHeapLocals,
+            thenKinds,
+            thenTritfieldLengths,
+            thenBitfieldLengths,
+            nextTemp,
+        )
+    }
+    for (const local of [...thenHeapLocals].reverse()) {
+        thenStatements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
+    }
+
+    const elseStatements: CStatement[] = []
+    const elseHeapLocals: string[] = []
+    const elseKinds = new Map(variableKinds)
+    const elseTritfieldLengths = new Map(tritfieldLengths)
+    const elseBitfieldLengths = new Map(bitfieldLengths)
+    for (const nested of statement.elseStatements) {
+        lowerStatement(
+            nested,
+            elseStatements,
+            elseHeapLocals,
+            elseKinds,
+            elseTritfieldLengths,
+            elseBitfieldLengths,
+            nextTemp,
+        )
+    }
+    for (const local of [...elseHeapLocals].reverse()) {
+        elseStatements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
+    }
+
+    statements.push(...loweredPredicate.setup)
+    statements.push({
+        kind: 'CIfStatement',
+        condition: {
+            kind: 'CRawExpression',
+            code: `(${cTruthValue('true')} == ${cExprCode(loweredPredicate.value)})`,
+        },
+        thenStatements,
+        elseStatements,
+    })
 }
 
 function lowerVariableDeclaration(

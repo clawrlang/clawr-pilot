@@ -177,6 +177,24 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('? 2 : 0')
     })
 
+    it('lowers if with true-only branch selection', () => {
+        const source = [
+            'const x = ambiguous',
+            'if (x) {',
+            '  print("then")',
+            '} else {',
+            '  print("else")',
+            '}',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-if-true-only.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('CIfStatement')
+        expect(serialized).toContain('(2 ==')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

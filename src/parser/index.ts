@@ -8,6 +8,7 @@ import type {
     Expression,
     ExpressionStatement,
     IdentifierExpression,
+    IfStatement,
     IntegerLiteralExpression,
     MemberExpression,
     Program,
@@ -55,6 +56,10 @@ export class Parser {
         const token = this.stream.peek({ skippingNewline: true })
         if (!token) throw new Error('Unexpected EOF')
 
+        if (token.kind === 'KEYWORD' && token.keyword === 'if') {
+            return this.parseIfStatement()
+        }
+
         if (
             token.kind === 'KEYWORD' &&
             (token.keyword === 'const' ||
@@ -65,6 +70,68 @@ export class Parser {
         }
 
         return this.parseExpressionStatement()
+    }
+
+    parseIfStatement(): IfStatement {
+        this.stream.expect('KEYWORD', 'if')
+        this.stream.expect('PUNCTUATION', '(')
+        const predicate = this.parseExpression()
+        this.stream.expect('PUNCTUATION', ')')
+        const thenStatements = this.parseBlockStatements()
+
+        let elseStatements: Statement[] = []
+        const next = this.stream.peek({ skippingNewline: true })
+        if (next && next.kind === 'KEYWORD' && next.keyword === 'else') {
+            this.stream.next({ skippingNewline: true })
+            const elseHead = this.stream.peek({ skippingNewline: true })
+            if (
+                elseHead &&
+                elseHead.kind === 'KEYWORD' &&
+                elseHead.keyword === 'if'
+            ) {
+                // else-if is parsed as syntactic sugar: else { if (...) { ... } }
+                elseStatements = [this.parseIfStatement()]
+            } else {
+                elseStatements = this.parseBlockStatements()
+            }
+        }
+
+        return {
+            kind: 'IfStatement',
+            predicate,
+            thenStatements,
+            elseStatements,
+        }
+    }
+
+    parseBlockStatements(): Statement[] {
+        this.stream.expect('PUNCTUATION', '{')
+        const statements: Statement[] = []
+
+        this.skipTrivia()
+        while (true) {
+            const next = this.stream.peek({ skippingNewline: true })
+            if (!next) throw new Error('Unexpected EOF in block statement')
+            if (next.kind === 'PUNCTUATION' && next.symbol === '}') {
+                this.stream.next({ skippingNewline: true })
+                return statements
+            }
+
+            const statement = this.parseStatement()
+            statements.push(statement)
+
+            const maybeBlockEnd = this.stream.peek({ skippingNewline: true })
+            if (
+                maybeBlockEnd &&
+                maybeBlockEnd.kind === 'PUNCTUATION' &&
+                maybeBlockEnd.symbol === '}'
+            ) {
+                continue
+            }
+
+            const endLine = this.lastTokenLine()
+            this.consumeStatementTerminator(endLine)
+        }
     }
 
     parseVariableDeclaration(): VariableDeclaration {

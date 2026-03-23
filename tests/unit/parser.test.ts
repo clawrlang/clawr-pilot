@@ -493,3 +493,62 @@ describe('parser binary expressions', () => {
         })
     })
 })
+
+describe('parser if statements', () => {
+    it('parses if/else with required parentheses and braces', () => {
+        const program = parseClawr(
+            [
+                'if (true) {',
+                '  print("then")',
+                '} else {',
+                '  print("else")',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'IfStatement',
+            predicate: { kind: 'TruthLiteral', value: 'true' },
+            thenStatements: [{ kind: 'ExpressionStatement' }],
+            elseStatements: [{ kind: 'ExpressionStatement' }],
+        })
+    })
+
+    it('requires parentheses around the predicate', () => {
+        expect(() =>
+            parseClawr('if true { print("x") } else { print("y") }', 'test'),
+        ).toThrow(/Expected \(, got TRUTH_LITERAL/)
+    })
+
+    it('requires braces around branches', () => {
+        expect(() => parseClawr('if (true) print("x")', 'test')).toThrow(
+            /Expected \{, got IDENTIFIER/,
+        )
+    })
+
+    it('parses else-if as a nested if in elseStatements', () => {
+        const program = parseClawr(
+            [
+                'if (false) {',
+                '  print("a")',
+                '} else if (true) {',
+                '  print("b")',
+                '} else {',
+                '  print("c")',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'IfStatement',
+            elseStatements: [
+                {
+                    kind: 'IfStatement',
+                    predicate: { kind: 'TruthLiteral', value: 'true' },
+                },
+            ],
+        })
+    })
+})

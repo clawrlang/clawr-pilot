@@ -22,6 +22,7 @@ export type CStatement =
     | CVariableDeclaration
     | CExpressionStatement
     | CAssignmentStatement
+    | CIfStatement
     | CReturnStatement
 
 export interface CVariableDeclaration {
@@ -40,6 +41,13 @@ export interface CAssignmentStatement {
     kind: 'CAssignmentStatement'
     target: CExpression
     value: CExpression
+}
+
+export interface CIfStatement {
+    kind: 'CIfStatement'
+    condition: CExpression
+    thenStatements: CStatement[]
+    elseStatements: CStatement[]
 }
 
 export interface CReturnStatement {
@@ -117,28 +125,56 @@ function emitFunction(fn: CFunction): string[] {
 
     lines.push(`${staticPrefix}${fn.returnType} ${fn.name}(${params}) {`)
     for (const statement of fn.statements) {
-        lines.push(`    ${emitStatement(statement)}`)
+        lines.push(...emitStatementLines(statement, 1))
     }
     lines.push('}')
 
     return lines
 }
 
-function emitStatement(statement: CStatement): string {
+function emitStatementLines(
+    statement: CStatement,
+    indentLevel: number,
+): string[] {
+    const indent = '    '.repeat(indentLevel)
+
     switch (statement.kind) {
         case 'CVariableDeclaration':
             if (!statement.initializer) {
-                return `${statement.type} ${statement.name};`
+                return [`${indent}${statement.type} ${statement.name};`]
             }
-            return `${statement.type} ${statement.name} = ${emitExpression(statement.initializer)};`
+            return [
+                `${indent}${statement.type} ${statement.name} = ${emitExpression(statement.initializer)};`,
+            ]
         case 'CExpressionStatement':
-            return `${emitExpression(statement.expression)};`
+            return [`${indent}${emitExpression(statement.expression)};`]
         case 'CAssignmentStatement':
-            return `${emitExpression(statement.target)} = ${emitExpression(statement.value)};`
+            return [
+                `${indent}${emitExpression(statement.target)} = ${emitExpression(statement.value)};`,
+            ]
+        case 'CIfStatement': {
+            const lines = [
+                `${indent}if (${emitExpression(statement.condition)}) {`,
+            ]
+            for (const nested of statement.thenStatements) {
+                lines.push(...emitStatementLines(nested, indentLevel + 1))
+            }
+            lines.push(`${indent}}`)
+            if (statement.elseStatements.length > 0) {
+                lines[lines.length - 1] += ' else {'
+                for (const nested of statement.elseStatements) {
+                    lines.push(...emitStatementLines(nested, indentLevel + 1))
+                }
+                lines.push(`${indent}}`)
+            }
+            return lines
+        }
         case 'CReturnStatement':
-            return statement.value
-                ? `return ${emitExpression(statement.value)};`
-                : 'return;'
+            return [
+                statement.value
+                    ? `${indent}return ${emitExpression(statement.value)};`
+                    : `${indent}return;`,
+            ]
     }
 }
 

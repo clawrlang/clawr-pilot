@@ -5,7 +5,7 @@ export interface Program {
 
 export type VariableSemantics = 'const' | 'mut' | 'ref'
 
-export type Statement = VariableDeclaration | ExpressionStatement
+export type Statement = VariableDeclaration | ExpressionStatement | IfStatement
 
 export interface VariableDeclaration {
     kind: 'VariableDeclaration'
@@ -17,6 +17,13 @@ export interface VariableDeclaration {
 export interface ExpressionStatement {
     kind: 'ExpressionStatement'
     expression: Expression
+}
+
+export interface IfStatement {
+    kind: 'IfStatement'
+    predicate: Expression
+    thenStatements: Statement[]
+    elseStatements: Statement[]
 }
 
 export type Expression =

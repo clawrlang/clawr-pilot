@@ -1,0 +1,13 @@
+const x = ambiguous
+if (x) {
+  print("then")
+} else {
+  print("else")
+}
+
+const y = true
+if (y) {
+  print("then")
+} else {
+  print("else")
+}

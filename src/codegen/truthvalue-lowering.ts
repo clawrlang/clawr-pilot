@@ -112,10 +112,7 @@ export function isTruthExpression(
                 isTruthExpression(expression.operand, variableKinds)
             )
         case 'BinaryExpression':
-            if (
-                expression.operator === '&&' ||
-                expression.operator === '||'
-            ) {
+            if (expression.operator === '&&' || expression.operator === '||') {
                 return (
                     isTruthExpression(expression.left, variableKinds) &&
                     isTruthExpression(expression.right, variableKinds)
@@ -384,8 +381,16 @@ function lowerComparisonExpression(
         isRealExpression(expression.left, variableKinds) &&
         isRealExpression(expression.right, variableKinds)
     ) {
-        const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
-        const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
+        const left = lowerRealExpression(
+            expression.left,
+            variableKinds,
+            nextTemp,
+        )
+        const right = lowerRealExpression(
+            expression.right,
+            variableKinds,
+            nextTemp,
+        )
         const compareCode = emitComparisonCode(
             'Real¸compare',
             left.value,

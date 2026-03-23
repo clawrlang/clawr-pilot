@@ -1,0 +1,17 @@
+const x = ambiguous
+
+if (x) {
+  print("then")
+} else if (true) {
+  print("else-if")
+} else {
+  print("else")
+}
+
+if (true) {
+  print("first")
+} else if (true) {
+  print("second")
+} else {
+  print("third")
+}
