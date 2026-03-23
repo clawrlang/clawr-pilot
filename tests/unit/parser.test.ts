@@ -384,4 +384,40 @@ describe('parser binary expressions', () => {
             },
         })
     })
+
+    it('parses parenthesized expressions', () => {
+        const program = parseClawr('const c = (a + b)', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '+',
+                left: { kind: 'Identifier', name: 'a' },
+                right: { kind: 'Identifier', name: 'b' },
+            },
+        })
+    })
+
+    it('parentheses override default precedence', () => {
+        const program = parseClawr('const c = (a | b) ^ (c & d)', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '^',
+                left: {
+                    kind: 'BinaryExpression',
+                    operator: '|',
+                    left: { kind: 'Identifier', name: 'a' },
+                    right: { kind: 'Identifier', name: 'b' },
+                },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '&',
+                    left: { kind: 'Identifier', name: 'c' },
+                    right: { kind: 'Identifier', name: 'd' },
+                },
+            },
+        })
+    })
 })

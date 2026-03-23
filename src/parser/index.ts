@@ -322,6 +322,12 @@ export class Parser {
         const token = this.stream.next({ skippingNewline: true })
         if (!token) throw new Error('Unexpected EOF while parsing expression')
 
+        if (token.kind === 'PUNCTUATION' && token.symbol === '(') {
+            const grouped = this.parseExpression()
+            this.stream.expect('PUNCTUATION', ')')
+            return grouped
+        }
+
         if (token.kind === 'IDENTIFIER') {
             return {
                 kind: 'Identifier',
