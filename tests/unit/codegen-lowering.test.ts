@@ -48,6 +48,27 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain(') | (')
     })
 
+    it('lowers tritfield rotate and adjust calls on split planes', () => {
+        const source = [
+            'const a = tritfield("0?1")',
+            'const b = tritfield("1?0")',
+            'const r = rotate(a, by: b)',
+            'const s = adjust(a, towards: b)',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-tritfield-rotate-adjust-lowering.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('rˇx0')
+        expect(serialized).toContain('rˇx1')
+        expect(serialized).toContain('sˇx0')
+        expect(serialized).toContain('sˇx1')
+        expect(serialized).toContain('~(')
+    })
+
     it('lowers bitfield constructor and lane operators', () => {
         const source = [
             'const a = bitfield("1010")',

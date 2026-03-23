@@ -30,6 +30,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
     const variableKinds = new Map<string, VariableKind>()
+    const tritfieldLengths = new Map<string, number>()
     let tempCounter = 0
 
     for (const statement of program.statements) {
@@ -38,6 +39,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
             mainStatements,
             heapLocals,
             variableKinds,
+            tritfieldLengths,
             () => `__clawr_tmp${tempCounter++}`,
         )
     }
@@ -143,6 +145,7 @@ function lowerStatement(
     statements: CStatement[],
     heapLocals: string[],
     variableKinds: Map<string, VariableKind>,
+    tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
@@ -151,6 +154,7 @@ function lowerStatement(
             statements,
             heapLocals,
             variableKinds,
+            tritfieldLengths,
             nextTemp,
         )
         return
@@ -164,6 +168,7 @@ function lowerVariableDeclaration(
     statements: CStatement[],
     heapLocals: string[],
     variableKinds: Map<string, VariableKind>,
+    tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
@@ -327,6 +332,7 @@ function lowerVariableDeclaration(
         const lowered = lowerTritfieldExpression(
             statement.initializer,
             variableKinds,
+            tritfieldLengths,
             nextTemp,
         )
         statements.push(...lowered.setup)
@@ -343,6 +349,7 @@ function lowerVariableDeclaration(
             initializer: lowered.x1,
         })
         variableKinds.set(statement.identifier.name, 'tritfield')
+        tritfieldLengths.set(statement.identifier.name, lowered.length)
         return
     }
 
