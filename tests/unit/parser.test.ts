@@ -342,6 +342,46 @@ describe('parser binary expressions', () => {
         })
     })
 
+    it('parses comparison operators below arithmetic', () => {
+        const program = parseClawr('const x = a + b < c * d', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '<',
+                left: {
+                    kind: 'BinaryExpression',
+                    operator: '+',
+                },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '*',
+                },
+            },
+        })
+    })
+
+    it('parses comparison operators above logical and', () => {
+        const program = parseClawr('const x = a < b && c < d', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '&&',
+                left: {
+                    kind: 'BinaryExpression',
+                    operator: '<',
+                },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '<',
+                },
+            },
+        })
+    })
+
     it('^ binds tighter than *', () => {
         const program = parseClawr('const c = a * b ^ d', 'test')
         expect(program.statements[0]).toMatchObject({

@@ -130,13 +130,13 @@ export class Parser {
     }
 
     parseLogicalAndExpression(): Expression {
-        let expr = this.parseAdditiveExpression()
+        let expr = this.parseComparisonExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
             if (token && token.kind === 'OPERATOR' && token.operator === '&&') {
                 this.stream.next({ skippingNewline: true })
-                const right = this.parseAdditiveExpression()
+                const right = this.parseComparisonExpression()
                 expr = {
                     kind: 'BinaryExpression',
                     operator: '&&',
@@ -182,6 +182,36 @@ export class Parser {
                 expr = {
                     kind: 'BinaryExpression',
                     operator: '&',
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseComparisonExpression(): Expression {
+        let expr = this.parseAdditiveExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (
+                token &&
+                token.kind === 'OPERATOR' &&
+                (token.operator === '==' ||
+                    token.operator === '!=' ||
+                    token.operator === '<' ||
+                    token.operator === '<=' ||
+                    token.operator === '>' ||
+                    token.operator === '>=')
+            ) {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseAdditiveExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: token.operator,
                     left: expr,
                     right,
                 } satisfies BinaryExpression

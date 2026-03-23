@@ -31,5 +31,6 @@ Real* Real¸subtract(Real* left, Real* right);
 Real* Real¸multiply(Real* left, Real* right);
 Real* Real¸divide(Real* dividend, Real* divisor);
 Real* Real¸power(Real* base, Real* exponent);
+int Real¸compare(Real* left, Real* right);
 
 #endif // CLAWR_REAL_H

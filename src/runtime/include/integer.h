@@ -86,4 +86,7 @@ Integer* Integer¸divide(Integer* dividend, Integer* divisor);
 /// Panics if exponent is negative.
 Integer* Integer¸power(Integer* base, Integer* exponent);
 
+/// @brief Compare two integers. Returns -1 if left < right, 0 if equal, 1 if left > right.
+int Integer¸compare(Integer* left, Integer* right);
+
 #endif // BIG_INTEGER_H

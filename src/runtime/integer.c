@@ -504,3 +504,17 @@ Integer* Integer¸power(Integer* base, Integer* exponent) {
     releaseRC(exp_rem);
     return result;
 }
+
+int Integer¸compare(Integer* left, Integer* right) {
+    Integer* diff = Integer¸subtract(left, right);
+    const char* decimal = Integer·toString(diff);
+
+    int result = 0;
+    if (strcmp(decimal, "0") != 0) {
+        result = decimal[0] == '-' ? -1 : 1;
+    }
+
+    free((void*) decimal);
+    releaseRC(diff);
+    return result;
+}

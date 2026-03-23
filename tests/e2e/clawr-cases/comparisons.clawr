@@ -1,0 +1,11 @@
+const i1 = 10
+const i2 = 20
+const r1 = 1.5
+const r2 = 2.0
+
+print(i1 < i2)
+print(i1 == i2)
+print(i2 >= i1)
+print(r1 <= r2)
+print(r1 != r2)
+print(r1 > r2)

@@ -454,3 +454,17 @@ Real* Real¸power(Real* base, Real* exponent) {
     releaseRC(b);
     return result;
 }
+
+int Real¸compare(Real* left, Real* right) {
+    Real* diff = Real¸subtract(left, right);
+    const char* decimal = Real·toString(diff);
+
+    int result = 0;
+    if (strcmp(decimal, "0.0") != 0) {
+        result = decimal[0] == '-' ? -1 : 1;
+    }
+
+    free((void*) decimal);
+    releaseRC(diff);
+    return result;
+}

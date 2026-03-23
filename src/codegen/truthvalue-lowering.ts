@@ -1,4 +1,4 @@
-import type { CallExpression, Expression } from '../ast'
+import type { BinaryExpression, CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
 import {
     type CallableSignatureSpec,
@@ -12,9 +12,15 @@ import {
 } from './callable-registry'
 import { cExprCode, cTruthValue } from './lowering-utils'
 import type { RuntimeType } from './lowering-types'
+import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
+import { isRealExpression, lowerRealExpression } from './real-lowering'
 
 type TruthBaseName = 'adjust' | 'rotate'
 type LoweredTruthExpression = { setup: CStatement[]; value: CExpression }
+type ComparisonOperator = Extract<
+    BinaryExpression['operator'],
+    '==' | '!=' | '<' | '<=' | '>' | '>='
+>
 type TruthFreeAliasName = 'rotateUp' | 'rotateDown' | 'adjustUp' | 'adjustDown'
 type TruthFreeAliasSpec = {
     name: TruthFreeAliasName
@@ -106,12 +112,26 @@ export function isTruthExpression(
                 isTruthExpression(expression.operand, variableKinds)
             )
         case 'BinaryExpression':
-            return (
-                (expression.operator === '&&' ||
-                    expression.operator === '||') &&
-                isTruthExpression(expression.left, variableKinds) &&
-                isTruthExpression(expression.right, variableKinds)
-            )
+            if (
+                expression.operator === '&&' ||
+                expression.operator === '||'
+            ) {
+                return (
+                    isTruthExpression(expression.left, variableKinds) &&
+                    isTruthExpression(expression.right, variableKinds)
+                )
+            }
+
+            if (isComparisonOperator(expression.operator)) {
+                return (
+                    (isIntegerExpression(expression.left, variableKinds) &&
+                        isIntegerExpression(expression.right, variableKinds)) ||
+                    (isRealExpression(expression.left, variableKinds) &&
+                        isRealExpression(expression.right, variableKinds))
+                )
+            }
+
+            return false
         case 'CallExpression':
             return isTruthCallExpression(expression, variableKinds)
         default:
@@ -206,6 +226,14 @@ export function lowerTruthExpression(
     }
 
     if (expression.kind === 'BinaryExpression') {
+        if (isComparisonOperator(expression.operator)) {
+            return lowerComparisonExpression(
+                expression,
+                variableKinds,
+                nextTemp,
+            )
+        }
+
         const left = lowerTruthExpression(
             expression.left,
             variableKinds,
@@ -290,6 +318,126 @@ export function lowerTruthExpression(
     }
 
     throw new Error('Unsupported truthvalue expression in this vertical slice')
+}
+
+function isComparisonOperator(
+    operator: BinaryExpression['operator'],
+): operator is ComparisonOperator {
+    return (
+        operator === '==' ||
+        operator === '!=' ||
+        operator === '<' ||
+        operator === '<=' ||
+        operator === '>' ||
+        operator === '>='
+    )
+}
+
+function lowerComparisonExpression(
+    expression: BinaryExpression,
+    variableKinds: Map<string, RuntimeType>,
+    nextTemp: () => string,
+): LoweredTruthExpression {
+    const temp = nextTemp()
+    const operator = expression.operator as ComparisonOperator
+
+    if (
+        isIntegerExpression(expression.left, variableKinds) &&
+        isIntegerExpression(expression.right, variableKinds)
+    ) {
+        const left = lowerIntegerExpression(
+            expression.left,
+            variableKinds,
+            nextTemp,
+        )
+        const right = lowerIntegerExpression(
+            expression.right,
+            variableKinds,
+            nextTemp,
+        )
+        const compareCode = emitComparisonCode(
+            'Integer¸compare',
+            left.value,
+            right.value,
+            operator,
+        )
+
+        return {
+            setup: [
+                ...left.setup,
+                ...right.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'int',
+                    name: temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code: `(${compareCode} ? 2 : 0)`,
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+        }
+    }
+
+    if (
+        isRealExpression(expression.left, variableKinds) &&
+        isRealExpression(expression.right, variableKinds)
+    ) {
+        const left = lowerRealExpression(expression.left, variableKinds, nextTemp)
+        const right = lowerRealExpression(expression.right, variableKinds, nextTemp)
+        const compareCode = emitComparisonCode(
+            'Real¸compare',
+            left.value,
+            right.value,
+            operator,
+        )
+
+        return {
+            setup: [
+                ...left.setup,
+                ...right.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'int',
+                    name: temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code: `(${compareCode} ? 2 : 0)`,
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+        }
+    }
+
+    throw new Error(
+        'Comparison operators currently support only integer and real operands',
+    )
+}
+
+function emitComparisonCode(
+    callee: 'Integer¸compare' | 'Real¸compare',
+    left: CExpression,
+    right: CExpression,
+    operator: '==' | '!=' | '<' | '<=' | '>' | '>=',
+): string {
+    const compare = `${callee}(${cExprCode(left)}, ${cExprCode(right)})`
+
+    switch (operator) {
+        case '==':
+            return `(${compare} == 0)`
+        case '!=':
+            return `(${compare} != 0)`
+        case '<':
+            return `(${compare} < 0)`
+        case '<=':
+            return `(${compare} <= 0)`
+        case '>':
+            return `(${compare} > 0)`
+        case '>=':
+            return `(${compare} >= 0)`
+    }
 }
 
 function lowerTruthRuntimeCall(

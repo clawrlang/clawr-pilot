@@ -145,6 +145,38 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('0.0')
     })
 
+    it('lowers integer comparisons to Integer¸compare truthvalue expressions', () => {
+        const source = [
+            'const a = 10',
+            'const b = 20',
+            'print(a < b)',
+            'print(a == b)',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-int-comparisons.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('Integer¸compare')
+        expect(serialized).toContain('? 2 : 0')
+    })
+
+    it('lowers real comparisons to Real¸compare truthvalue expressions', () => {
+        const source = [
+            'const a = 1.5',
+            'const b = 2.0',
+            'print(a <= b)',
+            'print(a != b)',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-real-comparisons.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('Real¸compare')
+        expect(serialized).toContain('? 2 : 0')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',
