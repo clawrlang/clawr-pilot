@@ -23,6 +23,7 @@ import {
 import {
     isTritfieldExpression,
     lowerTritfieldExpression,
+    tritfieldPlaneName,
 } from './tritfield-lowering'
 
 export function lowerToCIr(program: Program): CTranslationUnit {
@@ -331,8 +332,14 @@ function lowerVariableDeclaration(
         statements.push({
             kind: 'CVariableDeclaration',
             type: 'unsigned long long',
-            name: statement.identifier.name,
-            initializer: lowered.value,
+            name: tritfieldPlaneName(statement.identifier.name, 0),
+            initializer: lowered.x0,
+        })
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'unsigned long long',
+            name: tritfieldPlaneName(statement.identifier.name, 1),
+            initializer: lowered.x1,
         })
         variableKinds.set(statement.identifier.name, 'tritfield')
         return

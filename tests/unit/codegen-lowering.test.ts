@@ -15,9 +15,15 @@ describe('codegen lowering behavior', () => {
         )
         const serialized = JSON.stringify(ir)
 
-        // Canonical mapping uses 0->00, ?->01, 1->11 on each lane.
-        expect(serialized).toContain('7ULL')
-        expect(serialized).toContain('52ULL')
+        // Canonical mapping uses two planes: x0 for {?,1}, x1 for {1}.
+        expect(serialized).toContain('aˇx0')
+        expect(serialized).toContain('aˇx1')
+        expect(serialized).toContain('bˇx0')
+        expect(serialized).toContain('bˇx1')
+        expect(serialized).toContain('3ULL')
+        expect(serialized).toContain('1ULL')
+        expect(serialized).toContain('6ULL')
+        expect(serialized).toContain('4ULL')
     })
 
     it('lowers bitfield constructor and lane operators', () => {

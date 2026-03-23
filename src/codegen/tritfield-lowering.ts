@@ -2,7 +2,11 @@ import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
 import type { VariableKind } from './lowering-types'
 
-type LoweredTritfieldExpression = { setup: CStatement[]; value: CExpression }
+type LoweredTritfieldExpression = {
+    setup: CStatement[]
+    x0: CExpression
+    x1: CExpression
+}
 
 export function isTritfieldExpression(
     expression: Expression,
@@ -28,7 +32,14 @@ export function lowerTritfieldExpression(
     ) {
         return {
             setup: [],
-            value: { kind: 'CIdentifier', name: expression.name },
+            x0: {
+                kind: 'CIdentifier',
+                name: tritfieldPlaneName(expression.name, 0),
+            },
+            x1: {
+                kind: 'CIdentifier',
+                name: tritfieldPlaneName(expression.name, 1),
+            },
         }
     }
 
@@ -37,21 +48,33 @@ export function lowerTritfieldExpression(
         isTritfieldConstructorCall(expression)
     ) {
         const source = tritfieldConstructorSource(expression)
-        const packedBits = source
+        const x0Bits = source
             .split('')
             .map((ch) => {
-                if (ch === '0') return '00'
-                if (ch === '?') return '01'
-                return '11'
+                if (ch === '0') return '0'
+                if (ch === '?') return '1'
+                return '1'
             })
             .join('')
-        const numeric = BigInt(`0b${packedBits}`)
+        const x1Bits = source
+            .split('')
+            .map((ch) => {
+                if (ch === '1') return '1'
+                return '0'
+            })
+            .join('')
+        const x0Numeric = BigInt(`0b${x0Bits}`)
+        const x1Numeric = BigInt(`0b${x1Bits}`)
 
         return {
             setup: [],
-            value: {
+            x0: {
                 kind: 'CIntegerLiteral',
-                value: `${numeric.toString()}ULL`,
+                value: `${x0Numeric.toString()}ULL`,
+            },
+            x1: {
+                kind: 'CIntegerLiteral',
+                value: `${x1Numeric.toString()}ULL`,
             },
         }
     }
@@ -83,4 +106,8 @@ function tritfieldConstructorSource(expression: CallExpression): string {
     }
 
     throw new Error('Invalid tritfield constructor in this vertical slice')
+}
+
+export function tritfieldPlaneName(baseName: string, plane: 0 | 1): string {
+    return `${baseName}ˇx${plane}`
 }
