@@ -327,6 +327,7 @@ function lowerVariableDeclaration(
         const lowered = lowerTritfieldExpression(
             statement.initializer,
             variableKinds,
+            nextTemp,
         )
         statements.push(...lowered.setup)
         statements.push({

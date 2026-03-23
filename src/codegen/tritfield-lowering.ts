@@ -15,6 +15,12 @@ export function isTritfieldExpression(
     switch (expression.kind) {
         case 'Identifier':
             return variableKinds.get(expression.name) === 'tritfield'
+        case 'BinaryExpression':
+            return (
+                (expression.operator === '&' || expression.operator === '|') &&
+                isTritfieldExpression(expression.left, variableKinds) &&
+                isTritfieldExpression(expression.right, variableKinds)
+            )
         case 'CallExpression':
             return isTritfieldConstructorCall(expression)
         default:
@@ -25,6 +31,7 @@ export function isTritfieldExpression(
 export function lowerTritfieldExpression(
     expression: Expression,
     variableKinds: Map<string, VariableKind>,
+    nextTemp: () => string,
 ): LoweredTritfieldExpression {
     if (
         expression.kind === 'Identifier' &&
@@ -79,6 +86,51 @@ export function lowerTritfieldExpression(
         }
     }
 
+    if (
+        expression.kind === 'BinaryExpression' &&
+        (expression.operator === '&' || expression.operator === '|')
+    ) {
+        const left = lowerTritfieldExpression(
+            expression.left,
+            variableKinds,
+            nextTemp,
+        )
+        const right = lowerTritfieldExpression(
+            expression.right,
+            variableKinds,
+            nextTemp,
+        )
+        const x0Temp = nextTemp()
+        const x1Temp = nextTemp()
+
+        return {
+            setup: [
+                ...left.setup,
+                ...right.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'unsigned long long',
+                    name: x0Temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code: `((${emitExpr(left.x0)}) ${expression.operator} (${emitExpr(right.x0)}))`,
+                    },
+                },
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'unsigned long long',
+                    name: x1Temp,
+                    initializer: {
+                        kind: 'CRawExpression',
+                        code: `((${emitExpr(left.x1)}) ${expression.operator} (${emitExpr(right.x1)}))`,
+                    },
+                },
+            ],
+            x0: { kind: 'CIdentifier', name: x0Temp },
+            x1: { kind: 'CIdentifier', name: x1Temp },
+        }
+    }
+
     throw new Error('Unsupported tritfield expression in this vertical slice')
 }
 
@@ -110,4 +162,19 @@ function tritfieldConstructorSource(expression: CallExpression): string {
 
 export function tritfieldPlaneName(baseName: string, plane: 0 | 1): string {
     return `${baseName}ˇx${plane}`
+}
+
+function emitExpr(expression: CExpression): string {
+    switch (expression.kind) {
+        case 'CIdentifier':
+            return expression.name
+        case 'CIntegerLiteral':
+            return expression.value
+        case 'CRawExpression':
+            return expression.code
+        default:
+            throw new Error(
+                'Unsupported tritfield C expression shape in this vertical slice',
+            )
+    }
 }

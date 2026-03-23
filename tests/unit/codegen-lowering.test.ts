@@ -26,6 +26,28 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('4ULL')
     })
 
+    it('lowers tritfield boolean lane operators on split planes', () => {
+        const source = [
+            'const a = tritfield("0?1")',
+            'const b = tritfield("1?0")',
+            'const c = a & b',
+            'const d = a | b',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-tritfield-boolean-ops-lowering.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('cˇx0')
+        expect(serialized).toContain('cˇx1')
+        expect(serialized).toContain('dˇx0')
+        expect(serialized).toContain('dˇx1')
+        expect(serialized).toContain(') & (')
+        expect(serialized).toContain(') | (')
+    })
+
     it('lowers bitfield constructor and lane operators', () => {
         const source = [
             'const a = bitfield("1010")',
