@@ -254,6 +254,38 @@ describe('parser real literals', () => {
             },
         })
     })
+
+    it('parses unary minus on identifiers as a unary expression', () => {
+        const program = parseClawr('const x = -value', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'UnaryExpression',
+                operator: '-',
+                operand: {
+                    kind: 'Identifier',
+                    name: 'value',
+                },
+            },
+        })
+    })
+
+    it('parses unary minus on parenthesized expressions', () => {
+        const program = parseClawr('const x = -(a + b)', 'test')
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'UnaryExpression',
+                operator: '-',
+                operand: {
+                    kind: 'BinaryExpression',
+                    operator: '+',
+                },
+            },
+        })
+    })
 })
 
 describe('parser binary expressions', () => {

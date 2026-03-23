@@ -115,6 +115,36 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('~(')
     })
 
+    it('lowers unary minus on integer identifiers via Integer¸subtract', () => {
+        const source = [
+            'const a = 10',
+            'const b = -a',
+            'print(b.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-int-unary-minus.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('Integer¸subtract')
+        expect(serialized).toContain('0LL')
+    })
+
+    it('lowers unary minus on real identifiers via Real¸subtract', () => {
+        const source = [
+            'const a = 2.5e+3',
+            'const b = -a',
+            'print(b.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-real-unary-minus.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('Real¸subtract')
+        expect(serialized).toContain('0.0')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

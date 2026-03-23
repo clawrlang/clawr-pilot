@@ -17,6 +17,11 @@ export function isRealExpression(
             return true
         case 'Identifier':
             return variableKinds.get(expression.name) === 'real'
+        case 'UnaryExpression':
+            return (
+                expression.operator === '-' &&
+                isRealExpression(expression.operand, variableKinds)
+            )
         case 'BinaryExpression':
             return (
                 ['+', '-', '*', '/', '^'].includes(expression.operator) &&
@@ -63,6 +68,39 @@ export function lowerRealExpression(
             setup: [],
             value: { kind: 'CIdentifier', name: expression.name },
             heapTemps: [],
+        }
+    }
+
+    if (expression.kind === 'UnaryExpression' && expression.operator === '-') {
+        const zero = lowerRealExpression(
+            { kind: 'RealLiteral', value: '0.0' },
+            variableKinds,
+            nextTemp,
+        )
+        const operand = lowerRealExpression(
+            expression.operand,
+            variableKinds,
+            nextTemp,
+        )
+        const temp = nextTemp()
+
+        return {
+            setup: [
+                ...zero.setup,
+                ...operand.setup,
+                {
+                    kind: 'CVariableDeclaration',
+                    type: 'Real*',
+                    name: temp,
+                    initializer: {
+                        kind: 'CCallExpression',
+                        callee: 'Real¸subtract',
+                        args: [zero.value, operand.value],
+                    },
+                },
+            ],
+            value: { kind: 'CIdentifier', name: temp },
+            heapTemps: [...zero.heapTemps, ...operand.heapTemps, temp],
         }
     }
 

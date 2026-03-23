@@ -64,7 +64,7 @@ export interface BinaryExpression {
 
 export interface UnaryExpression {
     kind: 'UnaryExpression'
-    operator: '!' | '~'
+    operator: '!' | '~' | '-'
     operand: Expression
 }
 

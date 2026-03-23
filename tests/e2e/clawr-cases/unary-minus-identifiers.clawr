@@ -1,0 +1,7 @@
+const a = 10
+const b = -a
+const x = 2.5e+3
+const y = -x
+
+print(b.toString())
+print(y.toString())

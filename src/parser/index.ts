@@ -285,7 +285,7 @@ export class Parser {
 
         if (token.kind === 'OPERATOR' && token.operator === '-') {
             this.stream.next({ skippingNewline: true })
-            return this.parseNegatedPrimary(token)
+            return this.parseNegatedExpression(token)
         }
 
         return this.parsePostfixExpression()
@@ -370,29 +370,30 @@ export class Parser {
         )
     }
 
-    parseNegatedPrimary(operator: Token): Expression {
-        const value = this.stream.next({ skippingNewline: true })
-        if (!value) throw new Error('Unexpected EOF after unary -')
+    parseNegatedExpression(operator: Token): Expression {
+        const operand = this.parseUnaryExpression()
 
-        if (value.kind === 'INTEGER_LITERAL') {
+        if (operand.kind === 'IntegerLiteral') {
             return {
                 kind: 'IntegerLiteral',
-                value: -value.value,
+                value: -operand.value,
             } satisfies IntegerLiteralExpression
         }
 
-        if (value.kind === 'REAL_LITERAL') {
+        if (operand.kind === 'RealLiteral') {
             return {
                 kind: 'RealLiteral',
-                value: `-${value.source}`,
+                value: operand.value.startsWith('-')
+                    ? operand.value.slice(1)
+                    : `-${operand.value}`,
             } satisfies RealLiteralExpression
         }
 
-        throw parseError(
-            this.file,
-            operator,
-            'Unary - is currently supported only for numeric literals',
-        )
+        return {
+            kind: 'UnaryExpression',
+            operator: '-',
+            operand,
+        } satisfies UnaryExpression
     }
 
     parseCallExpression(callee: Expression): CallExpression {
