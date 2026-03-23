@@ -6,9 +6,12 @@ const d = a | b
 
 const rot = rotate(a, by: b)
 const adj = adjust(a, towards: b)
+const mod = modulate(a, by: b)
 
 const rotIdentity = rotate(a, by: tritfield("???"))
 const adjIdentity = adjust(a, towards: tritfield("???"))
+const modKeep = modulate(a, by: tritfield("111"))
+const modClear = modulate(a, by: tritfield("???"))
 
 print(a.toString())
 print(b.toString())
@@ -16,5 +19,8 @@ print(c.toString())
 print(d.toString())
 print(rot.toString())
 print(adj.toString())
+print(mod.toString())
 print(rotIdentity.toString())
 print(adjIdentity.toString())
+print(modKeep.toString())
+print(modClear.toString())

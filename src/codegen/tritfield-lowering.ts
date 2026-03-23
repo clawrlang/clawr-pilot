@@ -14,7 +14,7 @@ type LoweredTritfieldExpression = {
     length: number
 }
 
-type TritBaseName = 'rotate' | 'adjust'
+type TritBaseName = 'rotate' | 'adjust' | 'modulate'
 
 const TRIT_CALLABLES: CallableRegistry<TritBaseName> = {
     freeCalls: {
@@ -25,6 +25,11 @@ const TRIT_CALLABLES: CallableRegistry<TritBaseName> = {
         },
         rotate: {
             baseName: 'rotate',
+            arity: 2,
+            canonicalLabels: [null, 'by'],
+        },
+        modulate: {
+            baseName: 'modulate',
             arity: 2,
             canonicalLabels: [null, 'by'],
         },
@@ -206,6 +211,10 @@ export function lowerTritfieldExpression(
                 return lowerRotateTritfield(left, right, nextTemp)
             }
 
+            if (spec.baseName === 'modulate') {
+                return lowerModulateTritfield(left, right, nextTemp)
+            }
+
             return lowerAdjustTritfield(left, right, nextTemp)
         }
     }
@@ -304,6 +313,54 @@ function lowerAdjustTritfield(
 
     const r0 = `(((${yTrue} & ${up0}) | (${yFalse} & ${down0}) | (${yAmbiguous} & (${x0}))) & ${mask})`
     const r1 = `(((${yTrue} & ${up1}) | (${yFalse} & ${down1}) | (${yAmbiguous} & (${x1}))) & ${mask})`
+
+    return {
+        setup: [
+            ...x.setup,
+            ...y.setup,
+            {
+                kind: 'CVariableDeclaration',
+                type: 'unsigned long long',
+                name: r0Temp,
+                initializer: { kind: 'CRawExpression', code: r0 },
+            },
+            {
+                kind: 'CVariableDeclaration',
+                type: 'unsigned long long',
+                name: r1Temp,
+                initializer: { kind: 'CRawExpression', code: r1 },
+            },
+        ],
+        x0: { kind: 'CIdentifier', name: r0Temp },
+        x1: { kind: 'CIdentifier', name: r1Temp },
+        length: x.length,
+    }
+}
+
+function lowerModulateTritfield(
+    x: LoweredTritfieldExpression,
+    y: LoweredTritfieldExpression,
+    nextTemp: () => string,
+): LoweredTritfieldExpression {
+    const mask = maskLiteral(x.length)
+    const x0 = emitExpr(x.x0)
+    const x1 = emitExpr(x.x1)
+    const y0 = emitExpr(y.x0)
+    const y1 = emitExpr(y.x1)
+    const r0Temp = nextTemp()
+    const r1Temp = nextTemp()
+
+    const yTrue = `((${y1}) & (${y0}))`
+    const yFalse = `((~(${y1}) & ~(${y0})) & ${mask})`
+    const yAmbiguous = `((~(${y1}) & (${y0})) & ${mask})`
+
+    const flip0 = `((~(${x1})) & ${mask})`
+    const flip1 = `((~(${x0})) & ${mask})`
+    const clear0 = `${mask}`
+    const clear1 = '0ULL'
+
+    const r0 = `(((${yTrue} & (${x0})) | (${yFalse} & ${flip0}) | (${yAmbiguous} & ${clear0})) & ${mask})`
+    const r1 = `(((${yTrue} & (${x1})) | (${yFalse} & ${flip1}) | (${yAmbiguous} & ${clear1})) & ${mask})`
 
     return {
         setup: [

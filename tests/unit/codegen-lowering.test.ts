@@ -48,12 +48,13 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain(') | (')
     })
 
-    it('lowers tritfield rotate and adjust calls on split planes', () => {
+    it('lowers tritfield rotate, adjust, and modulate calls on split planes', () => {
         const source = [
             'const a = tritfield("0?1")',
             'const b = tritfield("1?0")',
             'const r = rotate(a, by: b)',
             'const s = adjust(a, towards: b)',
+            'const m = modulate(a, by: b)',
             '',
         ].join('\n')
 
@@ -66,6 +67,8 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('rˇx1')
         expect(serialized).toContain('sˇx0')
         expect(serialized).toContain('sˇx1')
+        expect(serialized).toContain('mˇx0')
+        expect(serialized).toContain('mˇx1')
         expect(serialized).toContain('~(')
     })
 
