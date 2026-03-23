@@ -130,7 +130,7 @@ export class Parser {
     }
 
     parseLogicalAndExpression(): Expression {
-        let expr = this.parseBitwiseOrExpression()
+        let expr = this.parseAdditiveExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
@@ -151,13 +151,13 @@ export class Parser {
     }
 
     parseBitwiseOrExpression(): Expression {
-        let expr = this.parseBitwiseAndExpression()
+        let expr = this.parseExponentiationExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
             if (token && token.kind === 'OPERATOR' && token.operator === '|') {
                 this.stream.next({ skippingNewline: true })
-                const right = this.parseBitwiseAndExpression()
+                const right = this.parseExponentiationExpression()
                 expr = {
                     kind: 'BinaryExpression',
                     operator: '|',
@@ -172,13 +172,13 @@ export class Parser {
     }
 
     parseBitwiseAndExpression(): Expression {
-        let expr = this.parseAdditiveExpression()
+        let expr = this.parseUnaryExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
             if (token && token.kind === 'OPERATOR' && token.operator === '&') {
                 this.stream.next({ skippingNewline: true })
-                const right = this.parseAdditiveExpression()
+                const right = this.parseUnaryExpression()
                 expr = {
                     kind: 'BinaryExpression',
                     operator: '&',
@@ -218,7 +218,7 @@ export class Parser {
     }
 
     parseMultiplicativeExpression(): Expression {
-        let expr = this.parseExponentiationExpression()
+        let expr = this.parseBitwiseOrExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
@@ -228,7 +228,7 @@ export class Parser {
                 (token.operator === '*' || token.operator === '/')
             ) {
                 this.stream.next({ skippingNewline: true })
-                const right = this.parseExponentiationExpression()
+                const right = this.parseBitwiseOrExpression()
                 expr = {
                     kind: 'BinaryExpression',
                     operator: token.operator,
@@ -243,7 +243,7 @@ export class Parser {
     }
 
     parseExponentiationExpression(): Expression {
-        const base = this.parseUnaryExpression()
+        const base = this.parseBitwiseAndExpression()
 
         const token = this.stream.peek({ skippingNewline: true })
         if (token && token.kind === 'OPERATOR' && token.operator === '^') {

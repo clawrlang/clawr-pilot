@@ -343,4 +343,45 @@ describe('parser binary expressions', () => {
             },
         })
     })
+
+    it('| is lower precedence than ^', () => {
+        const program = parseClawr('const c = a | b ^ c | d', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '|',
+                left: {
+                    kind: 'BinaryExpression',
+                    operator: '|',
+                    left: { kind: 'Identifier', name: 'a' },
+                    right: {
+                        kind: 'BinaryExpression',
+                        operator: '^',
+                        left: { kind: 'Identifier', name: 'b' },
+                        right: { kind: 'Identifier', name: 'c' },
+                    },
+                },
+                right: { kind: 'Identifier', name: 'd' },
+            },
+        })
+    })
+
+    it('^ is lower precedence than &', () => {
+        const program = parseClawr('const c = a ^ b & c', 'test')
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            initializer: {
+                kind: 'BinaryExpression',
+                operator: '^',
+                left: { kind: 'Identifier', name: 'a' },
+                right: {
+                    kind: 'BinaryExpression',
+                    operator: '&',
+                    left: { kind: 'Identifier', name: 'b' },
+                    right: { kind: 'Identifier', name: 'c' },
+                },
+            },
+        })
+    })
 })
