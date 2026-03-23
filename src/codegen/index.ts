@@ -16,6 +16,10 @@ import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
 import { isRealExpression, lowerRealExpression } from './real-lowering'
 import { lowerPrintCall } from './string-lowering'
+import {
+    isBitfieldExpression,
+    lowerBitfieldExpression,
+} from './bitfield-lowering'
 
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
@@ -297,8 +301,25 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (isBitfieldExpression(statement.initializer, variableKinds)) {
+        const lowered = lowerBitfieldExpression(
+            statement.initializer,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: 'unsigned long long',
+            name: statement.identifier.name,
+            initializer: lowered.value,
+        })
+        variableKinds.set(statement.identifier.name, 'bitfield')
+        return
+    }
+
     throw new Error(
-        'Only integer, truthvalue, real, and string literal variable initializers are supported in this vertical slice',
+        'Only integer, truthvalue, real, string, and bitfield variable initializers are supported in this vertical slice',
     )
 }
 

@@ -1,1 +1,6 @@
-export type VariableKind = 'integer' | 'truthvalue' | 'real' | 'string'
+export type VariableKind =
+    | 'integer'
+    | 'truthvalue'
+    | 'real'
+    | 'string'
+    | 'bitfield'

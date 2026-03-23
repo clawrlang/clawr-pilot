@@ -3,6 +3,31 @@ import { parseClawr } from '../../src/parser'
 import { lowerToCIr } from '../../src/codegen'
 
 describe('codegen lowering behavior', () => {
+    it('lowers bitfield constructor and lane operators', () => {
+        const source = [
+            'const a = bitfield("1010")',
+            'const b = bitfield("1100")',
+            'const c = a & b',
+            'const d = c | a',
+            'const e = c ^ b',
+            'const f = ~e',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-bitfield-lowering.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('unsigned long long')
+        expect(serialized).toContain('10ULL')
+        expect(serialized).toContain('12ULL')
+        expect(serialized).toContain(') & (')
+        expect(serialized).toContain(') | (')
+        expect(serialized).toContain(') ^ (')
+        expect(serialized).toContain('~(')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

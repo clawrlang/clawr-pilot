@@ -57,14 +57,14 @@ export interface StringLiteralExpression {
 
 export interface BinaryExpression {
     kind: 'BinaryExpression'
-    operator: '+' | '-' | '*' | '/' | '^' | '&&' | '||'
+    operator: '+' | '-' | '*' | '/' | '^' | '&' | '|' | '&&' | '||'
     left: Expression
     right: Expression
 }
 
 export interface UnaryExpression {
     kind: 'UnaryExpression'
-    operator: '!'
+    operator: '!' | '~'
     operand: Expression
 }
 

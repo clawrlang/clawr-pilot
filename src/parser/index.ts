@@ -130,7 +130,7 @@ export class Parser {
     }
 
     parseLogicalAndExpression(): Expression {
-        let expr = this.parseAdditiveExpression()
+        let expr = this.parseBitwiseOrExpression()
 
         while (true) {
             const token = this.stream.peek({ skippingNewline: true })
@@ -140,6 +140,48 @@ export class Parser {
                 expr = {
                     kind: 'BinaryExpression',
                     operator: '&&',
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseBitwiseOrExpression(): Expression {
+        let expr = this.parseBitwiseAndExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (token && token.kind === 'OPERATOR' && token.operator === '|') {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseBitwiseAndExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: '|',
+                    left: expr,
+                    right,
+                } satisfies BinaryExpression
+                continue
+            }
+
+            return expr
+        }
+    }
+
+    parseBitwiseAndExpression(): Expression {
+        let expr = this.parseAdditiveExpression()
+
+        while (true) {
+            const token = this.stream.peek({ skippingNewline: true })
+            if (token && token.kind === 'OPERATOR' && token.operator === '&') {
+                this.stream.next({ skippingNewline: true })
+                const right = this.parseAdditiveExpression()
+                expr = {
+                    kind: 'BinaryExpression',
+                    operator: '&',
                     left: expr,
                     right,
                 } satisfies BinaryExpression
@@ -228,6 +270,15 @@ export class Parser {
             return {
                 kind: 'UnaryExpression',
                 operator: '!',
+                operand: this.parseUnaryExpression(),
+            } satisfies UnaryExpression
+        }
+
+        if (token.kind === 'OPERATOR' && token.operator === '~') {
+            this.stream.next({ skippingNewline: true })
+            return {
+                kind: 'UnaryExpression',
+                operator: '~',
                 operand: this.parseUnaryExpression(),
             } satisfies UnaryExpression
         }
