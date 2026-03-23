@@ -359,6 +359,18 @@ function lowerVariableDeclaration(
         return
     }
 
+    if (mentionsBitfieldExpression(statement.initializer, variableKinds)) {
+        throw new Error(
+            'Bitfield expressions currently support only bitfield("...") constructors, identifiers, unary ~, and binary &, |, ^',
+        )
+    }
+
+    if (mentionsTritfieldExpression(statement.initializer, variableKinds)) {
+        throw new Error(
+            'Tritfield expressions currently support only tritfield("...") constructors, identifiers, binary &, |, and calls rotate(..., by: ...), adjust(..., towards: ...), modulate(..., by: ...)',
+        )
+    }
+
     throw new Error(
         'Only integer, truthvalue, real, string, bitfield, and tritfield variable initializers are supported in this vertical slice',
     )
@@ -384,4 +396,68 @@ function lowerExpressionStatement(
 function detachOwnedValue(value: CExpression, heapTemps: string[]) {
     if (value.kind !== 'CIdentifier') return heapTemps
     return heapTemps.filter((name) => name !== value.name)
+}
+
+function mentionsBitfieldExpression(
+    expression: Expression,
+    variableKinds: Map<string, RuntimeType>,
+): boolean {
+    switch (expression.kind) {
+        case 'Identifier':
+            return variableKinds.get(expression.name) === 'bitfield'
+        case 'UnaryExpression':
+            return mentionsBitfieldExpression(expression.operand, variableKinds)
+        case 'BinaryExpression':
+            return (
+                mentionsBitfieldExpression(expression.left, variableKinds) ||
+                mentionsBitfieldExpression(expression.right, variableKinds)
+            )
+        case 'CallExpression':
+            return (
+                (expression.callee.kind === 'Identifier' &&
+                    expression.callee.name === 'bitfield') ||
+                expression.arguments.some((argument) =>
+                    mentionsBitfieldExpression(argument.value, variableKinds),
+                )
+            )
+        case 'MemberExpression':
+            return mentionsBitfieldExpression(expression.object, variableKinds)
+        default:
+            return false
+    }
+}
+
+function mentionsTritfieldExpression(
+    expression: Expression,
+    variableKinds: Map<string, RuntimeType>,
+): boolean {
+    switch (expression.kind) {
+        case 'Identifier':
+            return variableKinds.get(expression.name) === 'tritfield'
+        case 'UnaryExpression':
+            return mentionsTritfieldExpression(
+                expression.operand,
+                variableKinds,
+            )
+        case 'BinaryExpression':
+            return (
+                mentionsTritfieldExpression(expression.left, variableKinds) ||
+                mentionsTritfieldExpression(expression.right, variableKinds)
+            )
+        case 'CallExpression':
+            return (
+                (expression.callee.kind === 'Identifier' &&
+                    (expression.callee.name === 'tritfield' ||
+                        expression.callee.name === 'rotate' ||
+                        expression.callee.name === 'adjust' ||
+                        expression.callee.name === 'modulate')) ||
+                expression.arguments.some((argument) =>
+                    mentionsTritfieldExpression(argument.value, variableKinds),
+                )
+            )
+        case 'MemberExpression':
+            return mentionsTritfieldExpression(expression.object, variableKinds)
+        default:
+            return false
+    }
 }

@@ -207,4 +207,31 @@ describe('codegen lowering behavior', () => {
             /toString\(\) receiver must currently be a variable/,
         )
     })
+
+    it('rejects unsupported bitfield arithmetic with a specific diagnostic', () => {
+        const source = [
+            'const a = bitfield("101")',
+            'const b = bitfield("011")',
+            'const c = a + b',
+            '',
+        ].join('\n')
+
+        const ast = parseClawr(source, 'test-bitfield-invalid-operator.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /Bitfield expressions currently support only bitfield\("\.\.\."\) constructors, identifiers, unary ~, and binary &, \|, \^/,
+        )
+    })
+
+    it('rejects unsupported tritfield unary operations with a specific diagnostic', () => {
+        const source = ['const a = tritfield("0?1")', 'const b = ~a', ''].join(
+            '\n',
+        )
+
+        const ast = parseClawr(source, 'test-tritfield-invalid-operator.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /Tritfield expressions currently support only tritfield\("\.\.\."\) constructors, identifiers, binary &, \|, and calls rotate\(\.\.\., by: \.\.\.\), adjust\(\.\.\., towards: \.\.\.\), modulate\(\.\.\., by: \.\.\.\)/,
+        )
+    })
 })
