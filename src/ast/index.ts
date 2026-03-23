@@ -5,12 +5,18 @@ export interface Program {
 
 export type VariableSemantics = 'const' | 'mut' | 'ref'
 
+export interface FieldTypeAnnotation {
+    baseName: 'bitfield' | 'tritfield'
+    length: number
+}
+
 export type Statement = VariableDeclaration | ExpressionStatement | IfStatement
 
 export interface VariableDeclaration {
     kind: 'VariableDeclaration'
     semantics: VariableSemantics
     identifier: IdentifierExpression
+    typeAnnotation: FieldTypeAnnotation | null
     initializer: Expression
 }
 

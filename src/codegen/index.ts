@@ -429,6 +429,22 @@ function lowerVariableDeclaration(
             bitfieldLengths,
             nextTemp,
         )
+        if (
+            statement.typeAnnotation &&
+            statement.typeAnnotation.baseName !== 'bitfield'
+        ) {
+            throw new Error(
+                `Variable ${statement.identifier.name} is declared as tritfield[${statement.typeAnnotation.length}] but initialized with a bitfield expression`,
+            )
+        }
+        if (
+            statement.typeAnnotation &&
+            statement.typeAnnotation.length !== lowered.length
+        ) {
+            throw new Error(
+                `bitfield length mismatch for ${statement.identifier.name}: declared ${statement.typeAnnotation.length}, got ${lowered.length}`,
+            )
+        }
         statements.push(...lowered.setup)
         statements.push({
             kind: 'CVariableDeclaration',
@@ -437,7 +453,10 @@ function lowerVariableDeclaration(
             initializer: lowered.value,
         })
         variableKinds.set(statement.identifier.name, 'bitfield')
-        bitfieldLengths.set(statement.identifier.name, lowered.length)
+        bitfieldLengths.set(
+            statement.identifier.name,
+            statement.typeAnnotation?.length ?? lowered.length,
+        )
         return
     }
 
@@ -448,6 +467,22 @@ function lowerVariableDeclaration(
             tritfieldLengths,
             nextTemp,
         )
+        if (
+            statement.typeAnnotation &&
+            statement.typeAnnotation.baseName !== 'tritfield'
+        ) {
+            throw new Error(
+                `Variable ${statement.identifier.name} is declared as bitfield[${statement.typeAnnotation.length}] but initialized with a tritfield expression`,
+            )
+        }
+        if (
+            statement.typeAnnotation &&
+            statement.typeAnnotation.length !== lowered.length
+        ) {
+            throw new Error(
+                `tritfield length mismatch for ${statement.identifier.name}: declared ${statement.typeAnnotation.length}, got ${lowered.length}`,
+            )
+        }
         statements.push(...lowered.setup)
         statements.push({
             kind: 'CVariableDeclaration',
@@ -462,8 +497,17 @@ function lowerVariableDeclaration(
             initializer: lowered.x1,
         })
         variableKinds.set(statement.identifier.name, 'tritfield')
-        tritfieldLengths.set(statement.identifier.name, lowered.length)
+        tritfieldLengths.set(
+            statement.identifier.name,
+            statement.typeAnnotation?.length ?? lowered.length,
+        )
         return
+    }
+
+    if (statement.typeAnnotation) {
+        throw new Error(
+            `Type annotation ${statement.typeAnnotation.baseName}[${statement.typeAnnotation.length}] requires a matching field initializer in this vertical slice`,
+        )
     }
 
     if (mentionsBitfieldExpression(statement.initializer, variableKinds)) {

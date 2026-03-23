@@ -1,0 +1,7 @@
+const a: bitfield[4] = bitfield("1010")
+const b: bitfield[4] = a ^ bitfield("0011")
+const t: tritfield[3] = tritfield("0?1")
+const u: tritfield[3] = rotate(t, by: tritfield("???"))
+
+print(b.toString())
+print(u.toString())

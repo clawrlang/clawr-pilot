@@ -115,6 +115,24 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('~(')
     })
 
+    it('lowers annotated bitfield/tritfield declarations', () => {
+        const source = [
+            'const a: bitfield[4] = bitfield("1010")',
+            'const b: bitfield[4] = a ^ bitfield("0011")',
+            'const t: tritfield[3] = tritfield("0?1")',
+            'const u: tritfield[3] = rotate(t, by: tritfield("???"))',
+            'print(b.toString())',
+            'print(u.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-annotated-fields.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('bitfield__toStringRC')
+        expect(serialized).toContain('tritfield__toStringRC')
+    })
+
     it('lowers unary minus on integer identifiers via Integer¸subtract', () => {
         const source = [
             'const a = 10',
@@ -300,6 +318,21 @@ describe('codegen lowering behavior', () => {
 
         expect(() => lowerToCIr(ast)).toThrow(
             /Bitfield expressions currently support only bitfield\("\.\.\."\) constructors, identifiers, unary ~, and binary &, \|, \^/,
+        )
+    })
+
+    it('rejects field declarations with mismatched annotated lengths', () => {
+        const source = ['const a: bitfield[5] = bitfield("1010")', ''].join(
+            '\n',
+        )
+
+        const ast = parseClawr(
+            source,
+            'test-annotated-bitfield-length-mismatch.clawr',
+        )
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /bitfield length mismatch for a: declared 5, got 4/,
         )
     })
 

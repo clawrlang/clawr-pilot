@@ -60,6 +60,45 @@ describe('parser variable declaration semantics', () => {
     }
 })
 
+describe('parser field type annotations', () => {
+    it('parses bitfield and tritfield type annotations', () => {
+        const program = parseClawr(
+            [
+                'const a: bitfield[4] = bitfield("1010")',
+                'const b: tritfield[3] = tritfield("0?1")',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                baseName: 'bitfield',
+                length: 4,
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                baseName: 'tritfield',
+                length: 3,
+            },
+        })
+    })
+
+    it('rejects unsupported type annotation base names', () => {
+        expect(() => parseClawr('const x: integer[1] = 1', 'test')).toThrow(
+            /Only bitfield\[N\] and tritfield\[N\] type annotations are supported/,
+        )
+    })
+
+    it('rejects out-of-range field lengths', () => {
+        expect(() =>
+            parseClawr('const x: bitfield[0] = bitfield("1")', 'test'),
+        ).toThrow(/Field type annotation length must be in \[1, 64\]/)
+    })
+})
+
 describe('parser unicode identifiers', () => {
     it('parses declarations with unicode identifiers', () => {
         const program = parseClawr('const 变量 = 42', 'test')

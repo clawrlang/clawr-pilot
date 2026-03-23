@@ -7,6 +7,7 @@ import type {
     CallExpression,
     Expression,
     ExpressionStatement,
+    FieldTypeAnnotation,
     IdentifierExpression,
     IfStatement,
     IntegerLiteralExpression,
@@ -150,6 +151,16 @@ export class Parser {
         this.stream.next({ skippingNewline: true })
 
         const ident = this.stream.expect('IDENTIFIER')
+        let typeAnnotation: FieldTypeAnnotation | null = null
+        const maybeColon = this.stream.peek({ skippingNewline: true })
+        if (
+            maybeColon &&
+            maybeColon.kind === 'PUNCTUATION' &&
+            maybeColon.symbol === ':'
+        ) {
+            this.stream.next({ skippingNewline: true })
+            typeAnnotation = this.parseFieldTypeAnnotation()
+        }
         this.stream.expect('PUNCTUATION', '=')
         const initializer = this.parseExpression()
 
@@ -160,7 +171,46 @@ export class Parser {
                 kind: 'Identifier',
                 name: ident.identifier,
             },
+            typeAnnotation,
             initializer,
+        }
+    }
+
+    parseFieldTypeAnnotation(): FieldTypeAnnotation {
+        const typeToken = this.stream.expect('IDENTIFIER')
+        if (
+            typeToken.identifier !== 'bitfield' &&
+            typeToken.identifier !== 'tritfield'
+        ) {
+            throw parseError(
+                this.file,
+                typeToken,
+                'Only bitfield[N] and tritfield[N] type annotations are supported in this vertical slice',
+            )
+        }
+
+        this.stream.expect('PUNCTUATION', '[')
+        const lengthToken = this.stream.next()
+        if (!lengthToken || lengthToken.kind !== 'INTEGER_LITERAL') {
+            throw parseError(
+                this.file,
+                lengthToken ?? typeToken,
+                `Expected INTEGER_LITERAL, got ${lengthToken?.kind ?? 'EOF'}`,
+            )
+        }
+        this.stream.expect('PUNCTUATION', ']')
+
+        if (lengthToken.value <= 0n || lengthToken.value > 64n) {
+            throw parseError(
+                this.file,
+                lengthToken,
+                'Field type annotation length must be in [1, 64]',
+            )
+        }
+
+        return {
+            baseName: typeToken.identifier,
+            length: Number(lengthToken.value),
         }
     }
 
