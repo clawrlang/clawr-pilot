@@ -23,24 +23,19 @@
 - Control flow
   - only `true` selects, `ambiguous` is akin to `false` in predicates.
   - Ternary operator with Python syntax: `a if x else b if !x else c`
-  - `if` `else if` `else`
   - `unless (predicate) { return/continue/break }` (guard clause)
   - `if const cn = nullable { /* cn is available (and not null) inside the block */ }`
   - `unless const cn = x.casename { return } // cn exists (and is not null) after block`
   - `for in` (no C-like `for` loop)
   - `when`, `=>` pattern matching
   - `when` as expression
-  - `while` and `until`
-  - Should `if` require parentheses (like Java/C) or braces (like Swift)?
+  - `while` and (maybe) `until`
 
-## Clearly advanced (and maybe entirely out of scope)
+## To be considered after Lattice is added
 
 - Referential constraints such as `func add(a: integer, b: integer) -> integer @value(a+b)`
 - Staggered lattices `integer @range(1...10) \/ @range(55...100)` (where `\/` means union or join)
 - Optimise/prune the AST based on known value-sets
-- Add support for `bitfield` and `tritfield`.
-  - Or use different names like `[byte]`? But what is a `tryte`? It is 6 or 9 trits, or some other size altogether?
-  - A `bitfield` is not a sequence of ones and zeros, but Boolean truths. And a similar rule applies to `tritfield` except it supports the `ambiguous` value.
 
 ## Refactorings and improvements
 
