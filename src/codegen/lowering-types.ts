@@ -1,4 +1,4 @@
-export type VariableKind =
+export type RuntimeType =
     | 'integer'
     | 'truthvalue'
     | 'real'

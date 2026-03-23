@@ -10,7 +10,7 @@ import {
     type CStatement,
     type CTranslationUnit,
 } from '../ir/c'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 import { cTruthValue } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
@@ -29,7 +29,7 @@ import {
 export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
-    const variableKinds = new Map<string, VariableKind>()
+    const variableKinds = new Map<string, RuntimeType>()
     const tritfieldLengths = new Map<string, number>()
     let tempCounter = 0
 
@@ -144,7 +144,7 @@ function lowerStatement(
     statement: Program['statements'][number],
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
@@ -173,7 +173,7 @@ function lowerVariableDeclaration(
     statement: VariableDeclaration,
     statements: CStatement[],
     heapLocals: string[],
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
@@ -367,7 +367,7 @@ function lowerVariableDeclaration(
 function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {

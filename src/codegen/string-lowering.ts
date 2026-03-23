@@ -1,7 +1,7 @@
 import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 
 type LoweredStringExpression = {
     setup: CStatement[]
@@ -12,7 +12,7 @@ type LoweredStringExpression = {
 export function lowerPrintCall(
     call: CallExpression,
     statements: CStatement[],
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
@@ -59,7 +59,7 @@ export function lowerPrintCall(
 
 function lowerStringExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ): LoweredStringExpression {

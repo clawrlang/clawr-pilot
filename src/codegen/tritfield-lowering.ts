@@ -1,6 +1,6 @@
 import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 import {
     type CallableRegistry,
     lookupFreeCallSpec,
@@ -38,7 +38,7 @@ const TRIT_CALLABLES: CallableRegistry<TritBaseName> = {
 
 export function isTritfieldExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     switch (expression.kind) {
         case 'Identifier':
@@ -61,7 +61,7 @@ export function isTritfieldExpression(
 
 export function lowerTritfieldExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ): LoweredTritfieldExpression {
@@ -224,7 +224,7 @@ export function lowerTritfieldExpression(
 
 function isTritfieldOperatorCall(
     expression: CallExpression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     if (expression.callee.kind !== 'Identifier') return false
 

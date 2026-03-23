@@ -1,13 +1,13 @@
 import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
 import { cExprCode } from './lowering-utils'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 
 type LoweredBitfieldExpression = { setup: CStatement[]; value: CExpression }
 
 export function isBitfieldExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     switch (expression.kind) {
         case 'Identifier':
@@ -34,7 +34,7 @@ export function isBitfieldExpression(
 
 export function lowerBitfieldExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredBitfieldExpression {
     if (

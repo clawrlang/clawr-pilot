@@ -1,6 +1,6 @@
 import type { BinaryExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 
 type LoweredRealExpression = {
     setup: CStatement[]
@@ -10,7 +10,7 @@ type LoweredRealExpression = {
 
 export function isRealExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     switch (expression.kind) {
         case 'RealLiteral':
@@ -30,7 +30,7 @@ export function isRealExpression(
 
 export function lowerRealExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredRealExpression {
     if (expression.kind === 'RealLiteral') {
@@ -75,7 +75,7 @@ export function lowerRealExpression(
 
 function lowerRealBinaryExpression(
     expression: BinaryExpression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredRealExpression {
     const left = lowerRealExpression(expression.left, variableKinds, nextTemp)

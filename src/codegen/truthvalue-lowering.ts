@@ -11,7 +11,7 @@ import {
     formatCallableDisplayName,
 } from './callable-registry'
 import { cExprCode, cTruthValue } from './lowering-utils'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 
 type TruthBaseName = 'adjust' | 'rotate'
 type LoweredTruthExpression = { setup: CStatement[]; value: CExpression }
@@ -93,7 +93,7 @@ function formatTruthFunctionCandidates(): string {
 
 export function isTruthExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     switch (expression.kind) {
         case 'TruthLiteral':
@@ -121,7 +121,7 @@ export function isTruthExpression(
 
 function isTruthCallExpression(
     expression: CallExpression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     if (expression.callee.kind === 'Identifier') {
         const spec = lookupFreeCallSpec(
@@ -158,7 +158,7 @@ function isTruthCallExpression(
 
 export function lowerTruthExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredTruthExpression {
     if (expression.kind === 'TruthLiteral') {
@@ -320,7 +320,7 @@ function lowerTruthRuntimeCall(
 function lowerValidatedTruthRuntimeCall(
     expression: CallExpression,
     spec: CallableSignatureSpec,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredTruthExpression {
     validateLabeledCall(expression.arguments, spec)

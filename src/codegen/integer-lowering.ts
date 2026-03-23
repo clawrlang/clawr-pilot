@@ -1,6 +1,6 @@
 import type { BinaryExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
-import type { VariableKind } from './lowering-types'
+import type { RuntimeType } from './lowering-types'
 
 type LoweredIntegerExpression = {
     setup: CStatement[]
@@ -10,7 +10,7 @@ type LoweredIntegerExpression = {
 
 export function isIntegerExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
 ): boolean {
     switch (expression.kind) {
         case 'IntegerLiteral':
@@ -30,7 +30,7 @@ export function isIntegerExpression(
 
 export function lowerIntegerExpression(
     expression: Expression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredIntegerExpression {
     if (expression.kind === 'IntegerLiteral') {
@@ -78,7 +78,7 @@ export function lowerIntegerExpression(
 
 function lowerIntegerBinaryExpression(
     expression: BinaryExpression,
-    variableKinds: Map<string, VariableKind>,
+    variableKinds: Map<string, RuntimeType>,
     nextTemp: () => string,
 ): LoweredIntegerExpression {
     const left = lowerIntegerExpression(
