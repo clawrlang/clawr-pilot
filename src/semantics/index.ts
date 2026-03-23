@@ -1,0 +1,21 @@
+export { analyzeProgram, type SemanticProgram } from './analyze'
+export {
+    bitfieldSet,
+    equalValueSets,
+    integerRange,
+    integerSingleton,
+    integerTop,
+    isSubsetValueSet,
+    joinValueSets,
+    meetValueSets,
+    neverValueSet,
+    realRange,
+    realSingleton,
+    realTop,
+    stringSingleton,
+    stringTop,
+    tritfieldSet,
+    truthvalueSet,
+    truthvalueTop,
+    type ValueSet,
+} from './lattice'
