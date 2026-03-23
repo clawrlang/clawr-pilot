@@ -69,6 +69,24 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('~(')
     })
 
+    it('lowers toString() calls for truthvalue and tritfield variables', () => {
+        const source = [
+            'const t = true',
+            'const f = tritfield("0?1")',
+            'print(t.toString())',
+            'print(f.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-tostring-kinds.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('truthvalue__toCString')
+        expect(serialized).toContain('tritfield__toStringRC')
+        expect(serialized).toContain('fˇx0')
+        expect(serialized).toContain('fˇx1')
+    })
+
     it('lowers bitfield constructor and lane operators', () => {
         const source = [
             'const a = bitfield("1010")',
@@ -174,7 +192,7 @@ describe('codegen lowering behavior', () => {
         const ast = parseClawr(source, 'test-print-non-truth-literal.clawr')
 
         expect(() => lowerToCIr(ast)).toThrow(
-            /Only truthvalue expressions and <identifier>\.toString\(\) are supported as print arguments/,
+            /Only truthvalue expressions and supported <identifier>\.toString\(\) calls are supported as print arguments/,
         )
     })
 

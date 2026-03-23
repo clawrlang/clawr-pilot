@@ -1,0 +1,20 @@
+const a = tritfield("0?1")
+const b = tritfield("1?0")
+
+const c = a & b
+const d = a | b
+
+const rot = rotate(a, by: b)
+const adj = adjust(a, towards: b)
+
+const rotIdentity = rotate(a, by: tritfield("???"))
+const adjIdentity = adjust(a, towards: tritfield("???"))
+
+print(a.toString())
+print(b.toString())
+print(c.toString())
+print(d.toString())
+print(rot.toString())
+print(adj.toString())
+print(rotIdentity.toString())
+print(adjIdentity.toString())

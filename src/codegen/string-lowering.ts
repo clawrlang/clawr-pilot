@@ -1,6 +1,5 @@
 import type { CallExpression, Expression } from '../ast'
 import type { CExpression, CStatement } from '../ir/c'
-import { cExprCode } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import type { VariableKind } from './lowering-types'
 
@@ -14,6 +13,7 @@ export function lowerPrintCall(
     call: CallExpression,
     statements: CStatement[],
     variableKinds: Map<string, VariableKind>,
+    tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -33,6 +33,7 @@ export function lowerPrintCall(
     const render = lowerStringExpression(
         call.arguments[0].value,
         variableKinds,
+        tritfieldLengths,
         nextTemp,
     )
     statements.push(...render.setup)
@@ -59,6 +60,7 @@ export function lowerPrintCall(
 function lowerStringExpression(
     expression: Expression,
     variableKinds: Map<string, VariableKind>,
+    tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ): LoweredStringExpression {
     if (expression.kind === 'TruthLiteral') {
@@ -113,8 +115,9 @@ function lowerStringExpression(
             return {
                 setup: [],
                 value: {
-                    kind: 'CRawExpression',
-                    code: `(${expression.name} == 0 ? "false" : (${expression.name} == 2 ? "true" : "ambiguous"))`,
+                    kind: 'CCallExpression',
+                    callee: 'truthvalue__toCString',
+                    args: [{ kind: 'CIdentifier', name: expression.name }],
                 },
             }
         }
@@ -146,12 +149,12 @@ function lowerStringExpression(
             variableKinds,
             nextTemp,
         )
-        const code = cExprCode(lowered.value)
         return {
             setup: lowered.setup,
             value: {
-                kind: 'CRawExpression',
-                code: `(${code} == 0 ? "false" : (${code} == 2 ? "true" : "ambiguous"))`,
+                kind: 'CCallExpression',
+                callee: 'truthvalue__toCString',
+                args: [lowered.value],
             },
         }
     }
@@ -170,6 +173,97 @@ function lowerStringExpression(
             }
 
             const variableKind = variableKinds.get(object.name)
+            if (variableKind === 'truthvalue') {
+                return {
+                    setup: [],
+                    value: {
+                        kind: 'CCallExpression',
+                        callee: 'truthvalue__toCString',
+                        args: [{ kind: 'CIdentifier', name: object.name }],
+                    },
+                }
+            }
+
+            if (variableKind === 'string') {
+                const cStringTemp = nextTemp()
+                return {
+                    setup: [
+                        {
+                            kind: 'CVariableDeclaration',
+                            type: 'const char*',
+                            name: cStringTemp,
+                            initializer: {
+                                kind: 'CCallExpression',
+                                callee: 'String·toCString',
+                                args: [
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: object.name,
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    value: { kind: 'CIdentifier', name: cStringTemp },
+                }
+            }
+
+            if (variableKind === 'tritfield') {
+                const knownLength = tritfieldLengths.get(object.name)
+                if (knownLength === undefined) {
+                    throw new Error(
+                        'Unknown tritfield length in this vertical slice',
+                    )
+                }
+
+                const stringObjectTemp = nextTemp()
+                const cStringTemp = nextTemp()
+                return {
+                    setup: [
+                        {
+                            kind: 'CVariableDeclaration',
+                            type: 'String*',
+                            name: stringObjectTemp,
+                            initializer: {
+                                kind: 'CCallExpression',
+                                callee: 'tritfield__toStringRC',
+                                args: [
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: `${object.name}ˇx0`,
+                                    },
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: `${object.name}ˇx1`,
+                                    },
+                                    {
+                                        kind: 'CIntegerLiteral',
+                                        value: `${knownLength}U`,
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            kind: 'CVariableDeclaration',
+                            type: 'const char*',
+                            name: cStringTemp,
+                            initializer: {
+                                kind: 'CCallExpression',
+                                callee: 'String·toCString',
+                                args: [
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: stringObjectTemp,
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    value: { kind: 'CIdentifier', name: cStringTemp },
+                    releaseAfterUse: stringObjectTemp,
+                }
+            }
+
             let toStringCallee: 'Integer·toStringRC' | 'Real·toStringRC'
             if (variableKind === 'integer') {
                 toStringCallee = 'Integer·toStringRC'
@@ -177,7 +271,7 @@ function lowerStringExpression(
                 toStringCallee = 'Real·toStringRC'
             } else {
                 throw new Error(
-                    'toString() is currently supported only for integer and real variables',
+                    'toString() is currently supported only for integer, real, truthvalue, string, and tritfield variables',
                 )
             }
 
@@ -222,12 +316,12 @@ function lowerStringExpression(
                 variableKinds,
                 nextTemp,
             )
-            const code = cExprCode(lowered.value)
             return {
                 setup: lowered.setup,
                 value: {
-                    kind: 'CRawExpression',
-                    code: `(${code} == 0 ? "false" : (${code} == 2 ? "true" : "ambiguous"))`,
+                    kind: 'CCallExpression',
+                    callee: 'truthvalue__toCString',
+                    args: [lowered.value],
                 },
             }
         } catch (error) {
@@ -245,6 +339,6 @@ function lowerStringExpression(
     }
 
     throw new Error(
-        'Only truthvalue expressions and <identifier>.toString() are supported as print arguments',
+        'Only truthvalue expressions and supported <identifier>.toString() calls are supported as print arguments',
     )
 }

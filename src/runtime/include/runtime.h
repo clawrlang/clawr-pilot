@@ -7,5 +7,6 @@
 #include "array.h"
 #include "real.h"
 #include "truthvalue.h"
+#include "tritfield.h"
 
 #endif // CLAWR_RUNTIME_H

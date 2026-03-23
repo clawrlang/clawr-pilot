@@ -160,7 +160,13 @@ function lowerStatement(
         return
     }
 
-    lowerExpressionStatement(statement, statements, variableKinds, nextTemp)
+    lowerExpressionStatement(
+        statement,
+        statements,
+        variableKinds,
+        tritfieldLengths,
+        nextTemp,
+    )
 }
 
 function lowerVariableDeclaration(
@@ -362,6 +368,7 @@ function lowerExpressionStatement(
     statement: ExpressionStatement,
     statements: CStatement[],
     variableKinds: Map<string, VariableKind>,
+    tritfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -371,7 +378,7 @@ function lowerExpressionStatement(
         )
     }
 
-    lowerPrintCall(expr, statements, variableKinds, nextTemp)
+    lowerPrintCall(expr, statements, variableKinds, tritfieldLengths, nextTemp)
 }
 
 function detachOwnedValue(value: CExpression, heapTemps: string[]) {

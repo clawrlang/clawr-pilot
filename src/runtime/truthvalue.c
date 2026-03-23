@@ -21,3 +21,10 @@ int adjust__towards(int value, int towards) {
 int rotate__by(int value, int by) {
     return rotate_impl(value, by);
 }
+
+const char* truthvalue__toCString(int value) {
+    int clamped = clamp_truthvalue(value);
+    if (clamped == 0) return "false";
+    if (clamped == 2) return "true";
+    return "ambiguous";
+}
