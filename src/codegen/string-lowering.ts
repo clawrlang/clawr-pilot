@@ -14,6 +14,7 @@ export function lowerPrintCall(
     statements: CStatement[],
     variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (call.callee.kind !== 'Identifier' || call.callee.name !== 'print') {
@@ -34,6 +35,7 @@ export function lowerPrintCall(
         call.arguments[0].value,
         variableKinds,
         tritfieldLengths,
+        bitfieldLengths,
         nextTemp,
     )
     statements.push(...render.setup)
@@ -61,6 +63,7 @@ function lowerStringExpression(
     expression: Expression,
     variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ): LoweredStringExpression {
     if (expression.kind === 'TruthLiteral') {
@@ -264,6 +267,58 @@ function lowerStringExpression(
                 }
             }
 
+            if (variableKind === 'bitfield') {
+                const knownLength = bitfieldLengths.get(object.name)
+                if (knownLength === undefined) {
+                    throw new Error(
+                        'Unknown bitfield length in this vertical slice',
+                    )
+                }
+
+                const stringObjectTemp = nextTemp()
+                const cStringTemp = nextTemp()
+                return {
+                    setup: [
+                        {
+                            kind: 'CVariableDeclaration',
+                            type: 'String*',
+                            name: stringObjectTemp,
+                            initializer: {
+                                kind: 'CCallExpression',
+                                callee: 'bitfield__toStringRC',
+                                args: [
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: object.name,
+                                    },
+                                    {
+                                        kind: 'CIntegerLiteral',
+                                        value: `${knownLength}U`,
+                                    },
+                                ],
+                            },
+                        },
+                        {
+                            kind: 'CVariableDeclaration',
+                            type: 'const char*',
+                            name: cStringTemp,
+                            initializer: {
+                                kind: 'CCallExpression',
+                                callee: 'String·toCString',
+                                args: [
+                                    {
+                                        kind: 'CIdentifier',
+                                        name: stringObjectTemp,
+                                    },
+                                ],
+                            },
+                        },
+                    ],
+                    value: { kind: 'CIdentifier', name: cStringTemp },
+                    releaseAfterUse: stringObjectTemp,
+                }
+            }
+
             let toStringCallee: 'Integer·toStringRC' | 'Real·toStringRC'
             if (variableKind === 'integer') {
                 toStringCallee = 'Integer·toStringRC'
@@ -271,7 +326,7 @@ function lowerStringExpression(
                 toStringCallee = 'Real·toStringRC'
             } else {
                 throw new Error(
-                    'toString() is currently supported only for integer, real, truthvalue, string, and tritfield variables',
+                    'toString() is currently supported only for integer, real, truthvalue, string, bitfield, and tritfield variables',
                 )
             }
 

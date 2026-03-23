@@ -1,0 +1,11 @@
+const a = bitfield("1010")
+const b = bitfield("1100")
+const c = a & b
+const d = c | a
+const e = ~c
+
+print(a.toString())
+print(b.toString())
+print(c.toString())
+print(d.toString())
+print(e.toString())

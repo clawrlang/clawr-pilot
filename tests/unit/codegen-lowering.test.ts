@@ -264,4 +264,22 @@ describe('codegen lowering behavior', () => {
             /tritfield operands must have matching lengths for rotate; got left=3, right=4/,
         )
     })
+
+    it('lowers bitfield.toString() to bitfield__toStringRC', () => {
+        const source = [
+            'const a = bitfield("1010")',
+            'const b = a & bitfield("1100")',
+            'print(a.toString())',
+            'print(b.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-bitfield-tostring.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('bitfield__toStringRC')
+        expect(serialized).toContain('4U')
+    })
 })

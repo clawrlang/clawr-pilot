@@ -3,7 +3,11 @@ import type { CExpression, CStatement } from '../ir/c'
 import { cExprCode } from './lowering-utils'
 import type { RuntimeType } from './lowering-types'
 
-type LoweredBitfieldExpression = { setup: CStatement[]; value: CExpression }
+type LoweredBitfieldExpression = {
+    setup: CStatement[]
+    value: CExpression
+    length: number
+}
 
 export function isBitfieldExpression(
     expression: Expression,
@@ -35,15 +39,21 @@ export function isBitfieldExpression(
 export function lowerBitfieldExpression(
     expression: Expression,
     variableKinds: Map<string, RuntimeType>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ): LoweredBitfieldExpression {
     if (
         expression.kind === 'Identifier' &&
         variableKinds.get(expression.name) === 'bitfield'
     ) {
+        const knownLength = bitfieldLengths.get(expression.name)
+        if (knownLength === undefined) {
+            throw new Error('Unknown bitfield length in this vertical slice')
+        }
         return {
             setup: [],
             value: { kind: 'CIdentifier', name: expression.name },
+            length: knownLength,
         }
     }
 
@@ -59,6 +69,7 @@ export function lowerBitfieldExpression(
                 kind: 'CIntegerLiteral',
                 value: `${numeric.toString()}ULL`,
             },
+            length: source.length,
         }
     }
 
@@ -66,6 +77,7 @@ export function lowerBitfieldExpression(
         const operand = lowerBitfieldExpression(
             expression.operand,
             variableKinds,
+            bitfieldLengths,
             nextTemp,
         )
         const temp = nextTemp()
@@ -84,6 +96,7 @@ export function lowerBitfieldExpression(
                 },
             ],
             value: { kind: 'CIdentifier', name: temp },
+            length: operand.length,
         }
     }
 
@@ -96,11 +109,13 @@ export function lowerBitfieldExpression(
         const left = lowerBitfieldExpression(
             expression.left,
             variableKinds,
+            bitfieldLengths,
             nextTemp,
         )
         const right = lowerBitfieldExpression(
             expression.right,
             variableKinds,
+            bitfieldLengths,
             nextTemp,
         )
         const temp = nextTemp()
@@ -120,6 +135,7 @@ export function lowerBitfieldExpression(
                 },
             ],
             value: { kind: 'CIdentifier', name: temp },
+            length: left.length,
         }
     }
 

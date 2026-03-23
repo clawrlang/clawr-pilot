@@ -31,6 +31,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
     const heapLocals: string[] = []
     const variableKinds = new Map<string, RuntimeType>()
     const tritfieldLengths = new Map<string, number>()
+    const bitfieldLengths = new Map<string, number>()
     let tempCounter = 0
 
     for (const statement of program.statements) {
@@ -40,6 +41,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
             heapLocals,
             variableKinds,
             tritfieldLengths,
+            bitfieldLengths,
             () => `__clawr_tmp${tempCounter++}`,
         )
     }
@@ -146,6 +148,7 @@ function lowerStatement(
     heapLocals: string[],
     variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (statement.kind === 'VariableDeclaration') {
@@ -155,6 +158,7 @@ function lowerStatement(
             heapLocals,
             variableKinds,
             tritfieldLengths,
+            bitfieldLengths,
             nextTemp,
         )
         return
@@ -165,6 +169,7 @@ function lowerStatement(
         statements,
         variableKinds,
         tritfieldLengths,
+        bitfieldLengths,
         nextTemp,
     )
 }
@@ -175,6 +180,7 @@ function lowerVariableDeclaration(
     heapLocals: string[],
     variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     if (statement.initializer.kind === 'IntegerLiteral') {
@@ -321,6 +327,7 @@ function lowerVariableDeclaration(
         const lowered = lowerBitfieldExpression(
             statement.initializer,
             variableKinds,
+            bitfieldLengths,
             nextTemp,
         )
         statements.push(...lowered.setup)
@@ -331,6 +338,7 @@ function lowerVariableDeclaration(
             initializer: lowered.value,
         })
         variableKinds.set(statement.identifier.name, 'bitfield')
+        bitfieldLengths.set(statement.identifier.name, lowered.length)
         return
     }
 
@@ -381,6 +389,7 @@ function lowerExpressionStatement(
     statements: CStatement[],
     variableKinds: Map<string, RuntimeType>,
     tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
     const expr = statement.expression
@@ -390,7 +399,14 @@ function lowerExpressionStatement(
         )
     }
 
-    lowerPrintCall(expr, statements, variableKinds, tritfieldLengths, nextTemp)
+    lowerPrintCall(
+        expr,
+        statements,
+        variableKinds,
+        tritfieldLengths,
+        bitfieldLengths,
+        nextTemp,
+    )
 }
 
 function detachOwnedValue(value: CExpression, heapTemps: string[]) {
