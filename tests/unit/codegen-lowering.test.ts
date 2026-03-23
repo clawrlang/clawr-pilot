@@ -234,4 +234,34 @@ describe('codegen lowering behavior', () => {
             /Tritfield expressions currently support only tritfield\("\.\.\."\) constructors, identifiers, binary &, \|, and calls rotate\(\.\.\., by: \.\.\.\), adjust\(\.\.\., towards: \.\.\.\), modulate\(\.\.\., by: \.\.\.\)/,
         )
     })
+
+    it('rejects tritfield binary operators with mismatched lengths', () => {
+        const source = [
+            'const a = tritfield("0?1")',
+            'const b = tritfield("1?01")',
+            'const c = a & b',
+            '',
+        ].join('\n')
+
+        const ast = parseClawr(source, 'test-tritfield-mismatch-binary.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /tritfield operands must have matching lengths for &; got left=3, right=4/,
+        )
+    })
+
+    it('rejects tritfield calls with mismatched lengths', () => {
+        const source = [
+            'const a = tritfield("0?1")',
+            'const b = tritfield("1?01")',
+            'const c = rotate(a, by: b)',
+            '',
+        ].join('\n')
+
+        const ast = parseClawr(source, 'test-tritfield-mismatch-call.clawr')
+
+        expect(() => lowerToCIr(ast)).toThrow(
+            /tritfield operands must have matching lengths for rotate; got left=3, right=4/,
+        )
+    })
 })

@@ -147,7 +147,7 @@ export function lowerTritfieldExpression(
             tritfieldLengths,
             nextTemp,
         )
-        ensureSameLength(left.length, right.length)
+        ensureSameLength(left.length, right.length, expression.operator)
 
         const x0Temp = nextTemp()
         const x1Temp = nextTemp()
@@ -205,7 +205,7 @@ export function lowerTritfieldExpression(
                 tritfieldLengths,
                 nextTemp,
             )
-            ensureSameLength(left.length, right.length)
+            ensureSameLength(left.length, right.length, spec.baseName)
 
             if (spec.baseName === 'rotate') {
                 return lowerRotateTritfield(left, right, nextTemp)
@@ -385,10 +385,10 @@ function lowerModulateTritfield(
     }
 }
 
-function ensureSameLength(left: number, right: number) {
+function ensureSameLength(left: number, right: number, context: string) {
     if (left !== right) {
         throw new Error(
-            'tritfield operands must have matching lengths in this vertical slice',
+            `tritfield operands must have matching lengths for ${context}; got left=${left}, right=${right}`,
         )
     }
 }
