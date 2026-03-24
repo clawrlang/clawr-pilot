@@ -22,6 +22,7 @@ import {
     isSubsetValueSet,
     meetValueSets,
     neverValueSet,
+    realRange,
     realSingleton,
     realTop,
     stringSingleton,
@@ -151,15 +152,25 @@ function analyzeSubsetDeclaration(
             break
         }
         case 'real': {
-            if (statement.constraint !== null) {
+            if (
+                statement.constraint &&
+                statement.constraint.kind !== 'real-range'
+            ) {
                 diagnostics.push({
                     position: statement.position,
                     message:
-                        'real subset directives are not supported in this vertical slice',
+                        'real subsets only support range constraints in this vertical slice',
                 })
                 return
             }
-            valueSet = realTop()
+            valueSet = statement.constraint
+                ? realRange({
+                      min: statement.constraint.min ?? undefined,
+                      max: statement.constraint.max ?? undefined,
+                      minInclusive: statement.constraint.minInclusive,
+                      maxInclusive: statement.constraint.maxInclusive,
+                  })
+                : realTop()
             break
         }
         case 'string': {
@@ -819,7 +830,14 @@ function allowedValueSetFromTypeAnnotation(
                   })
                 : integerTop()
         case 'real':
-            return realTop()
+            return typeAnnotation.realRange
+                ? realRange({
+                      min: typeAnnotation.realRange.min ?? undefined,
+                      max: typeAnnotation.realRange.max ?? undefined,
+                      minInclusive: typeAnnotation.realRange.minInclusive,
+                      maxInclusive: typeAnnotation.realRange.maxInclusive,
+                  })
+                : realTop()
         case 'string':
             return stringTop()
         case 'truthvalue':

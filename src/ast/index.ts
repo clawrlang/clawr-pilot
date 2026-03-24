@@ -29,6 +29,12 @@ export interface ValueSetTypeAnnotation {
         minInclusive: boolean
         maxInclusive: boolean
     } | null
+    realRange: {
+        min: string | null
+        max: string | null
+        minInclusive: boolean
+        maxInclusive: boolean
+    } | null
 }
 
 export interface SubsetAliasTypeAnnotation {
@@ -54,9 +60,18 @@ export interface IntegerRangeSubsetConstraint {
     maxInclusive: boolean
 }
 
+export interface RealRangeSubsetConstraint {
+    kind: 'real-range'
+    min: string | null
+    max: string | null
+    minInclusive: boolean
+    maxInclusive: boolean
+}
+
 export type SubsetConstraint =
     | TruthValueSubsetConstraint
     | IntegerRangeSubsetConstraint
+    | RealRangeSubsetConstraint
 
 export type Statement =
     | SubsetDeclaration

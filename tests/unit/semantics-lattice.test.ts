@@ -319,6 +319,46 @@ describe('semantic scaffold', () => {
         ])
     })
 
+    it('supports complete real range constraints in declarations and aliases', () => {
+        const program = parseClawr(
+            [
+                'subset unitInterval = real in [0..<1]',
+                'subset capped = real in [...10.5]',
+                'subset anyReal = real in [...]',
+                'mut u: unitInterval = 0.5',
+                'mut c: capped = -10.0',
+                'mut a: anyReal = 42.0',
+                'u = 1.0',
+                'c = 10.6',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindingStates.get('u')).toEqual({
+            semantics: 'mut',
+            current: realSingleton('0.5'),
+            allowed: realRange({ min: '0', max: '1', maxInclusive: false }),
+        })
+        expect(semanticProgram.bindingStates.get('c')).toEqual({
+            semantics: 'mut',
+            current: realSingleton('-10'),
+            allowed: realRange({ max: '10.5' }),
+        })
+        expect(semanticProgram.bindingStates.get('a')).toEqual({
+            semantics: 'mut',
+            current: realSingleton('42'),
+            allowed: realRange({}),
+        })
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'assigned value real[1] is not assignable to allowed set real[0..<1]',
+            'assigned value real[10.6] is not assignable to allowed set real[...10.5]',
+        ])
+    })
+
     it('supports subset aliases declared with in-constraints', () => {
         const program = parseClawr(
             [

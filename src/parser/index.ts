@@ -167,6 +167,10 @@ export class Parser {
             return this.parseIntegerRangeConstraint()
         }
 
+        if (familyToken.identifier === 'real') {
+            return this.parseRealRangeConstraint()
+        }
+
         throw parseError(
             this.file,
             familyToken,
@@ -316,6 +320,84 @@ export class Parser {
         }
     }
 
+    parseRealRangeConstraint(): {
+        constraint: Extract<SubsetConstraint, { kind: 'real-range' }>
+        position: SourcePosition
+    } {
+        this.stream.expect('PUNCTUATION', '[')
+
+        const min = this.parseOptionalSignedRealRangeBound()
+        const rangeOperator = this.stream.expect('OPERATOR', [
+            '...',
+            '..',
+            '..<',
+        ])
+        let upperExclusive = false
+
+        if (min === null && rangeOperator.operator === '...') {
+            const maybeLessThan = this.stream.peek({ skippingNewline: true })
+            if (
+                maybeLessThan &&
+                maybeLessThan.kind === 'OPERATOR' &&
+                maybeLessThan.operator === '<'
+            ) {
+                this.stream.next({ skippingNewline: true })
+                upperExclusive = true
+            }
+        }
+
+        const max = this.parseOptionalSignedRealRangeBound()
+
+        const close = this.stream.expect('PUNCTUATION', ']')
+
+        if (min !== null && rangeOperator.operator === '...') {
+            if (max !== null || upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Lower-bounded real ranges using ... cannot specify an upper bound',
+                )
+            }
+        } else if (min !== null) {
+            if (max === null) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... for real ranges with an omitted upper bound',
+                )
+            }
+        } else {
+            if (rangeOperator.operator !== '...') {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... before the upper bound when omitting the lower bound',
+                )
+            }
+            if (max === null && upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Real range must include at least one bound',
+                )
+            }
+        }
+
+        return {
+            constraint: {
+                kind: 'real-range',
+                min,
+                max,
+                minInclusive: true,
+                maxInclusive:
+                    min === null
+                        ? !upperExclusive
+                        : rangeOperator.operator !== '..<',
+            },
+            position: this.positionFromToken(close),
+        }
+    }
+
     parseOptionalSignedIntegerRangeBound(): bigint | null {
         const next = this.stream.peek({ skippingNewline: true })
         if (!next) return null
@@ -343,6 +425,44 @@ export class Parser {
         }
 
         return -magnitude.value
+    }
+
+    parseOptionalSignedRealRangeBound(): string | null {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!next) return null
+
+        if (next.kind === 'REAL_LITERAL') {
+            this.stream.next({ skippingNewline: true })
+            return next.source
+        }
+
+        if (next.kind === 'INTEGER_LITERAL') {
+            this.stream.next({ skippingNewline: true })
+            return next.value.toString()
+        }
+
+        if (next.kind !== 'OPERATOR' || next.operator !== '-') {
+            return null
+        }
+
+        this.stream.next({ skippingNewline: true })
+        const magnitude = this.stream.next({ skippingNewline: true })
+        if (!magnitude) {
+            throw new Error('Unexpected EOF in real range constraint')
+        }
+        if (magnitude.kind === 'REAL_LITERAL') {
+            return magnitude.source.startsWith('-')
+                ? magnitude.source.slice(1)
+                : `-${magnitude.source}`
+        }
+        if (magnitude.kind === 'INTEGER_LITERAL') {
+            return `-${magnitude.value.toString()}`
+        }
+        throw parseError(
+            this.file,
+            magnitude,
+            'Expected real bound after - in range constraint',
+        )
     }
 
     tryParseAssignmentStatement(): AssignmentStatement | null {
@@ -547,6 +667,7 @@ export class Parser {
             family,
             truthValues: null,
             integerRange: null,
+            realRange: null,
         }
 
         const maybeIn = this.stream.peek({ skippingNewline: true })
@@ -573,6 +694,14 @@ export class Parser {
             return {
                 ...annotation,
                 integerRange: parsed.constraint,
+            }
+        }
+
+        if (family === 'real') {
+            const parsed = this.parseRealRangeConstraint()
+            return {
+                ...annotation,
+                realRange: parsed.constraint,
             }
         }
 

@@ -168,6 +168,59 @@ describe('parser subset declarations', () => {
             },
         })
     })
+
+    it('parses real subset declarations with range syntax', () => {
+        const program = parseClawr(
+            [
+                'subset unitInterval = real in [0..<1]',
+                'subset capped = real in [...10.5]',
+                'subset belowFreezing = real in [...<0]',
+                'subset anyReal = real in [...]',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'real-range',
+                min: '0',
+                max: '1',
+                minInclusive: true,
+                maxInclusive: false,
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'real-range',
+                min: null,
+                max: '10.5',
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+        expect(program.statements[2]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'real-range',
+                min: null,
+                max: '0',
+                minInclusive: true,
+                maxInclusive: false,
+            },
+        })
+        expect(program.statements[3]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'real-range',
+                min: null,
+                max: null,
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+    })
 })
 
 describe('parser field type annotations', () => {
@@ -204,6 +257,7 @@ describe('parser field type annotations', () => {
                 'mut i: integer = 1',
                 'mut withinByte: integer in [0..255] = 1',
                 'mut r: real = 3.14',
+                'mut boundedReal: real in [0..<1] = 0.5',
                 'mut s: string = "x"',
                 'mut t: truthvalue in {false, true} = true',
             ].join('\n'),
@@ -234,7 +288,23 @@ describe('parser field type annotations', () => {
                 },
             },
         })
-        expect(program.statements[4]).toMatchObject({
+        expect(program.statements[3]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'real',
+                truthValues: null,
+                integerRange: null,
+                realRange: {
+                    kind: 'real-range',
+                    min: '0',
+                    max: '1',
+                    minInclusive: true,
+                    maxInclusive: false,
+                },
+            },
+        })
+        expect(program.statements[5]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
                 kind: 'subset',
@@ -292,6 +362,20 @@ describe('parser field type annotations', () => {
         expect(() =>
             parseClawr('subset bad = integer in [..]', 'test'),
         ).toThrow(
+            /Use \.\.\. before the upper bound when omitting the lower bound/,
+        )
+    })
+
+    it('rejects invalid real range forms', () => {
+        expect(() => parseClawr('subset bad = real in [0..]', 'test')).toThrow(
+            /Use \.\.\. for real ranges with an omitted upper bound/,
+        )
+        expect(() =>
+            parseClawr('subset bad = real in [0...1]', 'test'),
+        ).toThrow(
+            /Lower-bounded real ranges using \.\.\. cannot specify an upper bound/,
+        )
+        expect(() => parseClawr('subset bad = real in [..1]', 'test')).toThrow(
             /Use \.\.\. before the upper bound when omitting the lower bound/,
         )
     })
