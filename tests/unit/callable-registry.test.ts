@@ -8,9 +8,17 @@ import {
     type CallableRegistry,
 } from '../../src/codegen/callable-registry'
 
+const testPosition = {
+    file: 'test',
+    line: 1,
+    column: 1,
+    endLine: 1,
+    endColumn: 1,
+} as const
+
 const truthArgument = (label: string | null): CallArgument => ({
     label,
-    value: { kind: 'TruthLiteral', value: 'true' },
+    value: { kind: 'TruthLiteral', position: testPosition, value: 'true' },
 })
 
 describe('callable registry', () => {

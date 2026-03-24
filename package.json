@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Prototype compiler for the Clawr language",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "build": "bun run typecheck && bun build src/rwrc/index.ts --compile --outfile dist/rwrc",
     "dev": "ts-node src/rwrc/index.ts",
     "lint": "eslint . --ext .ts",
