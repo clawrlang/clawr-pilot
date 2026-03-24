@@ -1,11 +1,9 @@
 # TODO
 
 - Lattices: Replace types with value-sets
-  - enumerated (one or more distinct values)
-  - ranges (minimum and inclusive or exclusive maximum)
   - length and regex matches for `string`
   - Runtime: use simple C types when range and precision allow
-  - Static code-path analysis: Variables and expressions are compatible based on value-set
+  - Static code-path analysis and narrowing by control flow/path conditions
   - `subset boolean = truthvalue @except(ambiguous)` or `subset boolean = truthvalue @values(false, true)`
   - `subset natural = integer @range(0...)`
 - `data`, `object` and `service` types
@@ -16,12 +14,10 @@
   - `enum` list of values (like `truthvalue`)
   - tagged `union` types (labelled data structures, no tuples)
     - `x.casename?.property`
-- Validation: primitive values cannot be assigned to `ref` variables
 - Validation: `service` type cannot be assigned to `const`/`mut` variables
 - `trait` applicable to data-oriented type (i.e. `data` and `object`)
 - `role` applicable to `service` (`ref` only)
 - Control flow
-  - only `true` selects, `ambiguous` is akin to `false` in predicates.
   - Ternary operator with Python syntax: `a if x else b if !x else c`
   - `unless (predicate) { return/continue/break }` (guard clause)
   - `if const cn = nullable { /* cn is available (and not null) inside the block */ }`
@@ -39,5 +35,5 @@
 
 ## Refactorings and improvements
 
-- `real` (arbitrary-precision decimal; `Integer` significand + base-10 exponent; lazy string cache; `÷` limited to single-digit divisors until full `Integer¸divide` is implemented)
-- `char*` references (such as `toString()` rather than `toStringRC()`) might be obsolete now
+- `real`: remove current division limitation by implementing full `Integer¸divide` for multi-digit divisors (currently panics when divisor magnitude exceeds a single digit)
+- Deferred initializaton
