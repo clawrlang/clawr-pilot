@@ -73,7 +73,11 @@ export function lowerRealExpression(
 
     if (expression.kind === 'UnaryExpression' && expression.operator === '-') {
         const zero = lowerRealExpression(
-            { kind: 'RealLiteral', value: '0.0' },
+            {
+                kind: 'RealLiteral',
+                position: expression.position,
+                value: '0.0',
+            },
             variableKinds,
             nextTemp,
         )

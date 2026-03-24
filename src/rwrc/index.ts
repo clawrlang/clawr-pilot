@@ -36,7 +36,10 @@ async function buildCommand(sourceFile: string, outDir: string) {
     const semanticProgram = analyzeProgram(ast)
     if (semanticProgram.diagnostics.length > 0) {
         const message = semanticProgram.diagnostics
-            .map((diagnostic) => `semantic: ${diagnostic.message}`)
+            .map(
+                (diagnostic) =>
+                    `${diagnostic.position.file}:${diagnostic.position.line}:${diagnostic.position.column}:semantic: ${diagnostic.message}`,
+            )
             .join('\n')
         throw new Error(message)
     }

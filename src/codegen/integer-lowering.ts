@@ -76,7 +76,11 @@ export function lowerIntegerExpression(
 
     if (expression.kind === 'UnaryExpression' && expression.operator === '-') {
         const zero = lowerIntegerExpression(
-            { kind: 'IntegerLiteral', value: 0n },
+            {
+                kind: 'IntegerLiteral',
+                position: expression.position,
+                value: 0n,
+            },
             variableKinds,
             nextTemp,
         )

@@ -1,4 +1,8 @@
-export { analyzeProgram, type SemanticProgram } from './analyze'
+export {
+    analyzeProgram,
+    type SemanticDiagnostic,
+    type SemanticProgram,
+} from './analyze'
 export {
     bitfieldSet,
     equalValueSets,

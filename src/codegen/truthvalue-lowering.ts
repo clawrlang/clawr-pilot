@@ -28,6 +28,12 @@ type TruthFreeAliasSpec = {
     boundArguments: ReadonlyArray<BoundArgumentSpec>
 }
 
+const truthAliasPosition = {
+    file: '<codegen>',
+    line: 0,
+    column: 0,
+} as const
+
 const TRUTH_CALLABLES: CallableRegistry<TruthBaseName> = {
     freeCalls: {
         adjust: {
@@ -50,7 +56,11 @@ const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
         boundArguments: [
             {
                 label: 'by',
-                value: { kind: 'TruthLiteral', value: 'true' },
+                value: {
+                    kind: 'TruthLiteral',
+                    position: truthAliasPosition,
+                    value: 'true',
+                },
             },
         ],
     },
@@ -60,7 +70,11 @@ const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
         boundArguments: [
             {
                 label: 'by',
-                value: { kind: 'TruthLiteral', value: 'false' },
+                value: {
+                    kind: 'TruthLiteral',
+                    position: truthAliasPosition,
+                    value: 'false',
+                },
             },
         ],
     },
@@ -70,7 +84,11 @@ const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
         boundArguments: [
             {
                 label: 'towards',
-                value: { kind: 'TruthLiteral', value: 'true' },
+                value: {
+                    kind: 'TruthLiteral',
+                    position: truthAliasPosition,
+                    value: 'true',
+                },
             },
         ],
     },
@@ -80,7 +98,11 @@ const TRUTH_FREE_ALIASES: Record<TruthFreeAliasName, TruthFreeAliasSpec> = {
         boundArguments: [
             {
                 label: 'towards',
-                value: { kind: 'TruthLiteral', value: 'false' },
+                value: {
+                    kind: 'TruthLiteral',
+                    position: truthAliasPosition,
+                    value: 'false',
+                },
             },
         ],
     },

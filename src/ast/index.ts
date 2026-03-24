@@ -3,6 +3,12 @@ export interface Program {
     statements: Statement[]
 }
 
+export interface SourcePosition {
+    file: string
+    line: number
+    column: number
+}
+
 export type VariableSemantics = 'const' | 'mut' | 'ref'
 
 export interface FieldTypeAnnotation {
@@ -14,6 +20,7 @@ export type Statement = VariableDeclaration | ExpressionStatement | IfStatement
 
 export interface VariableDeclaration {
     kind: 'VariableDeclaration'
+    position: SourcePosition
     semantics: VariableSemantics
     identifier: IdentifierExpression
     typeAnnotation: FieldTypeAnnotation | null
@@ -22,11 +29,13 @@ export interface VariableDeclaration {
 
 export interface ExpressionStatement {
     kind: 'ExpressionStatement'
+    position: SourcePosition
     expression: Expression
 }
 
 export interface IfStatement {
     kind: 'IfStatement'
+    position: SourcePosition
     predicate: Expression
     thenStatements: Statement[]
     elseStatements: Statement[]
@@ -45,31 +54,37 @@ export type Expression =
 
 export interface IdentifierExpression {
     kind: 'Identifier'
+    position: SourcePosition
     name: string
 }
 
 export interface IntegerLiteralExpression {
     kind: 'IntegerLiteral'
+    position: SourcePosition
     value: bigint
 }
 
 export interface RealLiteralExpression {
     kind: 'RealLiteral'
+    position: SourcePosition
     value: string
 }
 
 export interface TruthLiteralExpression {
     kind: 'TruthLiteral'
+    position: SourcePosition
     value: 'false' | 'ambiguous' | 'true'
 }
 
 export interface StringLiteralExpression {
     kind: 'StringLiteral'
+    position: SourcePosition
     value: string
 }
 
 export interface BinaryExpression {
     kind: 'BinaryExpression'
+    position: SourcePosition
     operator:
         | '+'
         | '-'
@@ -92,12 +107,14 @@ export interface BinaryExpression {
 
 export interface UnaryExpression {
     kind: 'UnaryExpression'
+    position: SourcePosition
     operator: '!' | '~' | '-'
     operand: Expression
 }
 
 export interface MemberExpression {
     kind: 'MemberExpression'
+    position: SourcePosition
     object: Expression
     property: string
 }
@@ -109,6 +126,7 @@ export interface CallArgument {
 
 export interface CallExpression {
     kind: 'CallExpression'
+    position: SourcePosition
     callee: Expression
     arguments: CallArgument[]
 }

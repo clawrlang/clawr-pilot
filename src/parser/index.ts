@@ -16,6 +16,7 @@ import type {
     RealLiteralExpression,
     Statement,
     StringLiteralExpression,
+    SourcePosition,
     TruthLiteralExpression,
     UnaryExpression,
     VariableDeclaration,
@@ -74,7 +75,7 @@ export class Parser {
     }
 
     parseIfStatement(): IfStatement {
-        this.stream.expect('KEYWORD', 'if')
+        const ifToken = this.stream.expect('KEYWORD', 'if')
         this.stream.expect('PUNCTUATION', '(')
         const predicate = this.parseExpression()
         this.stream.expect('PUNCTUATION', ')')
@@ -99,6 +100,7 @@ export class Parser {
 
         return {
             kind: 'IfStatement',
+            position: this.positionFromToken(ifToken),
             predicate,
             thenStatements,
             elseStatements,
@@ -166,9 +168,11 @@ export class Parser {
 
         return {
             kind: 'VariableDeclaration',
+            position: this.positionFromToken(token),
             semantics,
             identifier: {
                 kind: 'Identifier',
+                position: this.positionFromToken(ident),
                 name: ident.identifier,
             },
             typeAnnotation,
@@ -215,9 +219,11 @@ export class Parser {
     }
 
     parseExpressionStatement(): ExpressionStatement {
+        const expression = this.parseExpression()
         return {
             kind: 'ExpressionStatement',
-            expression: this.parseExpression(),
+            position: expression.position,
+            expression,
         }
     }
 
@@ -235,6 +241,7 @@ export class Parser {
                 const right = this.parseLogicalAndExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: '||',
                     left: expr,
                     right,
@@ -256,6 +263,7 @@ export class Parser {
                 const right = this.parseComparisonExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: '&&',
                     left: expr,
                     right,
@@ -277,6 +285,7 @@ export class Parser {
                 const right = this.parseExponentiationExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: '|',
                     left: expr,
                     right,
@@ -298,6 +307,7 @@ export class Parser {
                 const right = this.parseUnaryExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: '&',
                     left: expr,
                     right,
@@ -328,6 +338,7 @@ export class Parser {
                 const right = this.parseAdditiveExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: token.operator,
                     left: expr,
                     right,
@@ -353,6 +364,7 @@ export class Parser {
                 const right = this.parseMultiplicativeExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: token.operator,
                     left: expr,
                     right,
@@ -378,6 +390,7 @@ export class Parser {
                 const right = this.parseBitwiseOrExpression()
                 expr = {
                     kind: 'BinaryExpression',
+                    position: expr.position,
                     operator: token.operator,
                     left: expr,
                     right,
@@ -399,6 +412,7 @@ export class Parser {
             const exponent = this.parseExponentiationExpression()
             return {
                 kind: 'BinaryExpression',
+                position: base.position,
                 operator: '^',
                 left: base,
                 right: exponent,
@@ -416,6 +430,7 @@ export class Parser {
             this.stream.next({ skippingNewline: true })
             return {
                 kind: 'UnaryExpression',
+                position: this.positionFromToken(token),
                 operator: '!',
                 operand: this.parseUnaryExpression(),
             } satisfies UnaryExpression
@@ -425,6 +440,7 @@ export class Parser {
             this.stream.next({ skippingNewline: true })
             return {
                 kind: 'UnaryExpression',
+                position: this.positionFromToken(token),
                 operator: '~',
                 operand: this.parseUnaryExpression(),
             } satisfies UnaryExpression
@@ -450,6 +466,7 @@ export class Parser {
                 const prop = this.stream.expect('IDENTIFIER')
                 expr = {
                     kind: 'MemberExpression',
+                    position: expr.position,
                     object: expr,
                     property: prop.identifier,
                 } satisfies MemberExpression
@@ -478,6 +495,7 @@ export class Parser {
         if (token.kind === 'IDENTIFIER') {
             return {
                 kind: 'Identifier',
+                position: this.positionFromToken(token),
                 name: token.identifier,
             } satisfies IdentifierExpression
         }
@@ -485,6 +503,7 @@ export class Parser {
         if (token.kind === 'INTEGER_LITERAL') {
             return {
                 kind: 'IntegerLiteral',
+                position: this.positionFromToken(token),
                 value: token.value,
             } satisfies IntegerLiteralExpression
         }
@@ -492,6 +511,7 @@ export class Parser {
         if (token.kind === 'REAL_LITERAL') {
             return {
                 kind: 'RealLiteral',
+                position: this.positionFromToken(token),
                 value: token.source,
             } satisfies RealLiteralExpression
         }
@@ -499,6 +519,7 @@ export class Parser {
         if (token.kind === 'TRUTH_LITERAL') {
             return {
                 kind: 'TruthLiteral',
+                position: this.positionFromToken(token),
                 value: token.value,
             } satisfies TruthLiteralExpression
         }
@@ -506,6 +527,7 @@ export class Parser {
         if (token.kind === 'STRING_LITERAL') {
             return {
                 kind: 'StringLiteral',
+                position: this.positionFromToken(token),
                 value: token.value,
             } satisfies StringLiteralExpression
         }
@@ -523,6 +545,7 @@ export class Parser {
         if (operand.kind === 'IntegerLiteral') {
             return {
                 kind: 'IntegerLiteral',
+                position: this.positionFromToken(operator),
                 value: -operand.value,
             } satisfies IntegerLiteralExpression
         }
@@ -530,6 +553,7 @@ export class Parser {
         if (operand.kind === 'RealLiteral') {
             return {
                 kind: 'RealLiteral',
+                position: this.positionFromToken(operator),
                 value: operand.value.startsWith('-')
                     ? operand.value.slice(1)
                     : `-${operand.value}`,
@@ -538,6 +562,7 @@ export class Parser {
 
         return {
             kind: 'UnaryExpression',
+            position: this.positionFromToken(operator),
             operator: '-',
             operand,
         } satisfies UnaryExpression
@@ -575,8 +600,17 @@ export class Parser {
 
         return {
             kind: 'CallExpression',
+            position: callee.position,
             callee,
             arguments: args,
+        }
+    }
+
+    positionFromToken(token: Token): SourcePosition {
+        return {
+            file: this.file,
+            line: token.line,
+            column: token.column,
         }
     }
 

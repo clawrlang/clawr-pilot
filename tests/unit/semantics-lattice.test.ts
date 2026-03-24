@@ -179,5 +179,18 @@ describe('semantic scaffold', () => {
             'if predicate must be truthvalue, got integer',
             "unknown identifier 'missingName'",
         ])
+
+        expect(
+            semanticProgram.diagnostics.map(
+                (diagnostic) => diagnostic.position,
+            ),
+        ).toEqual([
+            { file: 'test', line: 3, column: 18 },
+            { file: 'test', line: 4, column: 20 },
+            { file: 'test', line: 5, column: 16 },
+            { file: 'test', line: 6, column: 16 },
+            { file: 'test', line: 7, column: 5 },
+            { file: 'test', line: 8, column: 20 },
+        ])
     })
 })

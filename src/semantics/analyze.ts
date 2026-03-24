@@ -5,6 +5,7 @@ import type {
     Expression,
     IfStatement,
     Program,
+    SourcePosition,
     Statement,
     UnaryExpression,
     VariableDeclaration,
@@ -22,6 +23,7 @@ import {
 } from './lattice'
 
 export interface SemanticDiagnostic {
+    position: SourcePosition
     message: string
 }
 
@@ -82,6 +84,7 @@ function analyzeIfStatement(
 
     if (predicate && predicate.family !== 'truthvalue') {
         diagnostics.push({
+            position: statement.predicate.position,
             message: `if predicate must be truthvalue, got ${describeValueSet(predicate)}`,
         })
     }
@@ -114,6 +117,7 @@ function inferDeclarationValueSet(
             validateTypeAnnotationCompatibility(
                 annotated,
                 initializer,
+                statement.position,
                 diagnostics,
             )
         }
@@ -126,6 +130,7 @@ function inferDeclarationValueSet(
             validateTypeAnnotationCompatibility(
                 annotated,
                 initializer,
+                statement.position,
                 diagnostics,
             )
         }
@@ -145,6 +150,7 @@ function inferExpressionValueSet(
             const bound = bindings.get(expression.name)
             if (bound) return bound
             diagnostics.push({
+                position: expression.position,
                 message: `unknown identifier '${expression.name}'`,
             })
             return null
@@ -184,6 +190,7 @@ function inferUnaryValueSet(
         case '!':
             if (operand.family !== 'truthvalue') {
                 diagnostics.push({
+                    position: expression.position,
                     message: `operator '!' requires truthvalue operand, got ${describeValueSet(operand)}`,
                 })
                 return null
@@ -192,6 +199,7 @@ function inferUnaryValueSet(
         case '~':
             if (operand.family !== 'bitfield') {
                 diagnostics.push({
+                    position: expression.position,
                     message: `operator '~' requires bitfield operand, got ${describeValueSet(operand)}`,
                 })
                 return null
@@ -220,6 +228,7 @@ function inferUnaryValueSet(
             }
 
             diagnostics.push({
+                position: expression.position,
                 message: `operator '-' requires integer or real operand, got ${describeValueSet(operand)}`,
             })
             return null
@@ -259,6 +268,7 @@ function inferBinaryValueSet(
                 return meetValueSets(left, right)
             }
             diagnostics.push({
+                position: expression.position,
                 message: `operator '${expression.operator}' requires matching numeric operands${
                     expression.operator === '^' ? ' or bitfield operands' : ''
                 }, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
@@ -273,6 +283,7 @@ function inferBinaryValueSet(
                 return meetValueSets(left, right)
             }
             diagnostics.push({
+                position: expression.position,
                 message: `operator '${expression.operator}' requires matching bitfield or tritfield operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
             })
             return null
@@ -285,6 +296,7 @@ function inferBinaryValueSet(
                 )
             }
             diagnostics.push({
+                position: expression.position,
                 message: `operator '&&' requires truthvalue operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
             })
             return null
@@ -293,6 +305,7 @@ function inferBinaryValueSet(
                 return combineTruthvalueSets(left.values, right.values, truthOr)
             }
             diagnostics.push({
+                position: expression.position,
                 message: `operator '||' requires truthvalue operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
             })
             return null
@@ -309,6 +322,7 @@ function inferBinaryValueSet(
                 return truthvalueSet('false', 'true')
             }
             diagnostics.push({
+                position: expression.position,
                 message: `operator '${expression.operator}' requires matching integer or real operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
             })
             return null
@@ -330,6 +344,7 @@ function inferCallValueSet(
 
     if (expression.arguments.length !== 1) {
         diagnostics.push({
+            position: expression.position,
             message: `${expression.callee.name}(...) requires exactly one argument`,
         })
         return null
@@ -338,6 +353,7 @@ function inferCallValueSet(
     const [argument] = expression.arguments
     if (argument.label !== null) {
         diagnostics.push({
+            position: expression.position,
             message: `${expression.callee.name}(...) does not accept labeled arguments`,
         })
         return null
@@ -345,6 +361,7 @@ function inferCallValueSet(
 
     if (argument.value.kind !== 'StringLiteral') {
         diagnostics.push({
+            position: expression.position,
             message: `${expression.callee.name}(...) requires a string literal argument`,
         })
         return null
@@ -360,10 +377,12 @@ function inferCallValueSet(
 function validateTypeAnnotationCompatibility(
     annotated: ValueSet,
     inferred: ValueSet,
+    position: SourcePosition,
     diagnostics: SemanticDiagnostic[],
 ) {
     if (annotated.family !== inferred.family) {
         diagnostics.push({
+            position,
             message: `type annotation ${describeValueSet(annotated)} is incompatible with initializer ${describeValueSet(inferred)}`,
         })
         return
@@ -376,6 +395,7 @@ function validateTypeAnnotationCompatibility(
             inferred.length !== annotated.length
         ) {
             diagnostics.push({
+                position,
                 message: `type annotation bitfield[${annotated.length}] is incompatible with bitfield[${inferred.length}] initializer`,
             })
         }
@@ -388,6 +408,7 @@ function validateTypeAnnotationCompatibility(
             inferred.length !== annotated.length
         ) {
             diagnostics.push({
+                position,
                 message: `type annotation tritfield[${annotated.length}] is incompatible with tritfield[${inferred.length}] initializer`,
             })
         }
