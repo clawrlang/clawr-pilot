@@ -82,6 +82,7 @@ describe('semantic scaffold', () => {
         )
 
         const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
 
         expect(semanticProgram.bindings.get('i')).toEqual(integerSingleton(42n))
         expect(semanticProgram.bindings.get('r')).toEqual(realSingleton('3.14'))
@@ -121,6 +122,7 @@ describe('semantic scaffold', () => {
         )
 
         const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
 
         expect(semanticProgram.bindings.get('iAlias')).toEqual(
             integerSingleton(42n),
@@ -148,5 +150,34 @@ describe('semantic scaffold', () => {
         expect(semanticProgram.bindings.get('cmp')).toEqual(
             truthvalueSet('false', 'true'),
         )
+    })
+
+    it('reports family mismatch diagnostics for invalid expressions', () => {
+        const program = parseClawr(
+            [
+                'const i = 1',
+                'const b = bitfield("101")',
+                'const badUnary = !i',
+                'const badLogical = i && true',
+                'const badBit = b & i',
+                'const badCmp = b < i',
+                'if (i) { const ok = true }',
+                'const unknownUse = missingName',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "operator '!' requires truthvalue operand, got integer",
+            "operator '&&' requires truthvalue operands, got integer and truthvalue",
+            "operator '&' requires matching bitfield or tritfield operands, got bitfield[3] and integer",
+            "operator '<' requires matching integer or real operands, got bitfield[3] and integer",
+            'if predicate must be truthvalue, got integer',
+            "unknown identifier 'missingName'",
+        ])
     })
 })

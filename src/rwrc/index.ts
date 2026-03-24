@@ -33,7 +33,13 @@ async function buildCommand(sourceFile: string, outDir: string) {
     const absoluteSourcePath = path.resolve(process.cwd(), sourceFile)
     const source = fs.readFileSync(absoluteSourcePath, 'utf-8')
     const ast = parseClawr(source, absoluteSourcePath)
-    analyzeProgram(ast)
+    const semanticProgram = analyzeProgram(ast)
+    if (semanticProgram.diagnostics.length > 0) {
+        const message = semanticProgram.diagnostics
+            .map((diagnostic) => `semantic: ${diagnostic.message}`)
+            .join('\n')
+        throw new Error(message)
+    }
     const loweredIr = lowerToCIr(ast)
     const optimizedIr = optimizeCIr(loweredIr)
     const generatedC = emitC(optimizedIr)

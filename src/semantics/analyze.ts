@@ -3,7 +3,9 @@ import type {
     BinaryExpression,
     CallExpression,
     Expression,
+    IfStatement,
     Program,
+    Statement,
     UnaryExpression,
     VariableDeclaration,
 } from '../ast'
@@ -15,54 +17,138 @@ import {
     meetValueSets,
     realSingleton,
     realTop,
-    truthvalueTop,
-    stringSingleton,
-    tritfieldSet,
     truthvalueSet,
     type ValueSet,
 } from './lattice'
 
+export interface SemanticDiagnostic {
+    message: string
+}
+
 export interface SemanticProgram {
     bindings: Map<string, ValueSet>
+    diagnostics: SemanticDiagnostic[]
 }
 
 export function analyzeProgram(program: Program): SemanticProgram {
     const bindings = new Map<string, ValueSet>()
+    const diagnostics: SemanticDiagnostic[] = []
 
     for (const statement of program.statements) {
-        if (statement.kind !== 'VariableDeclaration') continue
-
-        const inferred = inferDeclarationValueSet(statement, bindings)
-        if (inferred) {
-            bindings.set(statement.identifier.name, inferred)
-        }
+        analyzeStatement(statement, bindings, diagnostics)
     }
 
-    return { bindings }
+    return { bindings, diagnostics }
+}
+
+function analyzeStatement(
+    statement: Statement,
+    bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    switch (statement.kind) {
+        case 'VariableDeclaration': {
+            const inferred = inferDeclarationValueSet(
+                statement,
+                bindings,
+                diagnostics,
+            )
+            if (inferred) {
+                bindings.set(statement.identifier.name, inferred)
+            }
+            return
+        }
+        case 'ExpressionStatement': {
+            inferExpressionValueSet(statement.expression, bindings, diagnostics)
+            return
+        }
+        case 'IfStatement': {
+            analyzeIfStatement(statement, bindings, diagnostics)
+            return
+        }
+    }
+}
+
+function analyzeIfStatement(
+    statement: IfStatement,
+    bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    const predicate = inferExpressionValueSet(
+        statement.predicate,
+        bindings,
+        diagnostics,
+    )
+
+    if (predicate && predicate.family !== 'truthvalue') {
+        diagnostics.push({
+            message: `if predicate must be truthvalue, got ${describeValueSet(predicate)}`,
+        })
+    }
+
+    const thenBindings = new Map(bindings)
+    for (const child of statement.thenStatements) {
+        analyzeStatement(child, thenBindings, diagnostics)
+    }
+
+    const elseBindings = new Map(bindings)
+    for (const child of statement.elseStatements) {
+        analyzeStatement(child, elseBindings, diagnostics)
+    }
 }
 
 function inferDeclarationValueSet(
     statement: VariableDeclaration,
     bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
+    const initializer = inferExpressionValueSet(
+        statement.initializer,
+        bindings,
+        diagnostics,
+    )
+
     if (statement.typeAnnotation?.baseName === 'bitfield') {
-        return bitfieldSet(statement.typeAnnotation.length)
+        const annotated = bitfieldSet(statement.typeAnnotation.length)
+        if (initializer) {
+            validateTypeAnnotationCompatibility(
+                annotated,
+                initializer,
+                diagnostics,
+            )
+        }
+        return annotated
     }
 
     if (statement.typeAnnotation?.baseName === 'tritfield') {
-        return tritfieldSet(statement.typeAnnotation.length)
+        const annotated = tritfieldSet(statement.typeAnnotation.length)
+        if (initializer) {
+            validateTypeAnnotationCompatibility(
+                annotated,
+                initializer,
+                diagnostics,
+            )
+        }
+        return annotated
     }
 
-    return inferExpressionValueSet(statement.initializer, bindings)
+    return initializer
 }
 
 function inferExpressionValueSet(
     expression: Expression,
     bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     switch (expression.kind) {
-        case 'Identifier':
-            return bindings.get(expression.name) ?? null
+        case 'Identifier': {
+            const bound = bindings.get(expression.name)
+            if (bound) return bound
+            diagnostics.push({
+                message: `unknown identifier '${expression.name}'`,
+            })
+            return null
+        }
         case 'IntegerLiteral':
             return integerSingleton(expression.value)
         case 'RealLiteral':
@@ -72,12 +158,12 @@ function inferExpressionValueSet(
         case 'StringLiteral':
             return stringSingleton(expression.value)
         case 'UnaryExpression':
-            return inferUnaryValueSet(expression, bindings)
+            return inferUnaryValueSet(expression, bindings, diagnostics)
         case 'BinaryExpression':
-            return inferBinaryValueSet(expression, bindings)
+            return inferBinaryValueSet(expression, bindings, diagnostics)
         case 'CallExpression':
-            return inferCallValueSet(expression)
-        default:
+            return inferCallValueSet(expression, diagnostics)
+        case 'MemberExpression':
             return null
     }
 }
@@ -85,16 +171,32 @@ function inferExpressionValueSet(
 function inferUnaryValueSet(
     expression: UnaryExpression,
     bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
-    const operand = inferExpressionValueSet(expression.operand, bindings)
+    const operand = inferExpressionValueSet(
+        expression.operand,
+        bindings,
+        diagnostics,
+    )
     if (!operand) return null
 
     switch (expression.operator) {
         case '!':
-            if (operand.family !== 'truthvalue') return null
+            if (operand.family !== 'truthvalue') {
+                diagnostics.push({
+                    message: `operator '!' requires truthvalue operand, got ${describeValueSet(operand)}`,
+                })
+                return null
+            }
             return truthvalueSet(...operand.values.map(invertTruthValue))
         case '~':
-            return operand.family === 'bitfield' ? operand : null
+            if (operand.family !== 'bitfield') {
+                diagnostics.push({
+                    message: `operator '~' requires bitfield operand, got ${describeValueSet(operand)}`,
+                })
+                return null
+            }
+            return operand
         case '-':
             if (operand.family === 'integer') {
                 if (operand.form === 'top') return integerTop()
@@ -117,6 +219,9 @@ function inferUnaryValueSet(
                 return realRangeFromNegation(operand)
             }
 
+            diagnostics.push({
+                message: `operator '-' requires integer or real operand, got ${describeValueSet(operand)}`,
+            })
             return null
     }
 }
@@ -124,9 +229,14 @@ function inferUnaryValueSet(
 function inferBinaryValueSet(
     expression: BinaryExpression,
     bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
-    const left = inferExpressionValueSet(expression.left, bindings)
-    const right = inferExpressionValueSet(expression.right, bindings)
+    const left = inferExpressionValueSet(expression.left, bindings, diagnostics)
+    const right = inferExpressionValueSet(
+        expression.right,
+        bindings,
+        diagnostics,
+    )
     if (!left || !right) return null
 
     switch (expression.operator) {
@@ -141,26 +251,51 @@ function inferBinaryValueSet(
             if (left.family === 'real' && right.family === 'real') {
                 return realTop()
             }
-            if (left.family === 'bitfield' && right.family === 'bitfield') {
+            if (
+                expression.operator === '^' &&
+                left.family === 'bitfield' &&
+                right.family === 'bitfield'
+            ) {
                 return meetValueSets(left, right)
             }
+            diagnostics.push({
+                message: `operator '${expression.operator}' requires matching numeric operands${
+                    expression.operator === '^' ? ' or bitfield operands' : ''
+                }, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+            })
             return null
         case '&':
         case '|':
-            if (left.family !== 'bitfield' || right.family !== 'bitfield') {
-                return null
+            if (left.family === 'bitfield' && right.family === 'bitfield') {
+                return meetValueSets(left, right)
             }
-            return meetValueSets(left, right)
+            if (left.family === 'tritfield' && right.family === 'tritfield') {
+                return meetValueSets(left, right)
+            }
+            diagnostics.push({
+                message: `operator '${expression.operator}' requires matching bitfield or tritfield operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+            })
+            return null
         case '&&':
-            if (left.family !== 'truthvalue' || right.family !== 'truthvalue') {
-                return null
+            if (left.family === 'truthvalue' && right.family === 'truthvalue') {
+                return combineTruthvalueSets(
+                    left.values,
+                    right.values,
+                    truthAnd,
+                )
             }
-            return combineTruthvalueSets(left.values, right.values, truthAnd)
+            diagnostics.push({
+                message: `operator '&&' requires truthvalue operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+            })
+            return null
         case '||':
-            if (left.family !== 'truthvalue' || right.family !== 'truthvalue') {
-                return null
+            if (left.family === 'truthvalue' && right.family === 'truthvalue') {
+                return combineTruthvalueSets(left.values, right.values, truthOr)
             }
-            return combineTruthvalueSets(left.values, right.values, truthOr)
+            diagnostics.push({
+                message: `operator '||' requires truthvalue operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+            })
+            return null
         case '==':
         case '!=':
         case '<':
@@ -173,16 +308,45 @@ function inferBinaryValueSet(
             ) {
                 return truthvalueSet('false', 'true')
             }
+            diagnostics.push({
+                message: `operator '${expression.operator}' requires matching integer or real operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+            })
             return null
     }
 }
 
-function inferCallValueSet(expression: CallExpression): ValueSet | null {
+function inferCallValueSet(
+    expression: CallExpression,
+    diagnostics: SemanticDiagnostic[],
+): ValueSet | null {
     if (expression.callee.kind !== 'Identifier') return null
-    if (expression.arguments.length !== 1) return null
+
+    if (
+        expression.callee.name !== 'bitfield' &&
+        expression.callee.name !== 'tritfield'
+    ) {
+        return null
+    }
+
+    if (expression.arguments.length !== 1) {
+        diagnostics.push({
+            message: `${expression.callee.name}(...) requires exactly one argument`,
+        })
+        return null
+    }
 
     const [argument] = expression.arguments
-    if (argument.label !== null || argument.value.kind !== 'StringLiteral') {
+    if (argument.label !== null) {
+        diagnostics.push({
+            message: `${expression.callee.name}(...) does not accept labeled arguments`,
+        })
+        return null
+    }
+
+    if (argument.value.kind !== 'StringLiteral') {
+        diagnostics.push({
+            message: `${expression.callee.name}(...) requires a string literal argument`,
+        })
         return null
     }
 
@@ -190,11 +354,59 @@ function inferCallValueSet(expression: CallExpression): ValueSet | null {
         return bitfieldSet(argument.value.value.length)
     }
 
-    if (expression.callee.name === 'tritfield') {
-        return tritfieldSet(argument.value.value.length)
+    return tritfieldSet(argument.value.value.length)
+}
+
+function validateTypeAnnotationCompatibility(
+    annotated: ValueSet,
+    inferred: ValueSet,
+    diagnostics: SemanticDiagnostic[],
+) {
+    if (annotated.family !== inferred.family) {
+        diagnostics.push({
+            message: `type annotation ${describeValueSet(annotated)} is incompatible with initializer ${describeValueSet(inferred)}`,
+        })
+        return
     }
 
-    return null
+    if (annotated.family === 'bitfield' && inferred.family === 'bitfield') {
+        if (
+            inferred.length !== null &&
+            annotated.length !== null &&
+            inferred.length !== annotated.length
+        ) {
+            diagnostics.push({
+                message: `type annotation bitfield[${annotated.length}] is incompatible with bitfield[${inferred.length}] initializer`,
+            })
+        }
+    }
+
+    if (annotated.family === 'tritfield' && inferred.family === 'tritfield') {
+        if (
+            inferred.length !== null &&
+            annotated.length !== null &&
+            inferred.length !== annotated.length
+        ) {
+            diagnostics.push({
+                message: `type annotation tritfield[${annotated.length}] is incompatible with tritfield[${inferred.length}] initializer`,
+            })
+        }
+    }
+}
+
+function describeValueSet(valueSet: ValueSet): string {
+    if (valueSet.family === 'never') return 'never'
+    if (valueSet.family === 'bitfield') {
+        return valueSet.length === null
+            ? 'bitfield'
+            : `bitfield[${valueSet.length}]`
+    }
+    if (valueSet.family === 'tritfield') {
+        return valueSet.length === null
+            ? 'tritfield'
+            : `tritfield[${valueSet.length}]`
+    }
+    return valueSet.family
 }
 
 function invertTruthValue(value: 'false' | 'ambiguous' | 'true') {
@@ -264,4 +476,19 @@ function negateRealString(value: string): string {
 
 function canonicalizeReal(value: string): string {
     return new Decimal(value).toString()
+}
+
+function stringSingleton(value: string): ValueSet {
+    return {
+        family: 'string',
+        form: 'singleton',
+        value,
+    }
+}
+
+function tritfieldSet(length?: number): ValueSet {
+    return {
+        family: 'tritfield',
+        length: length ?? null,
+    }
 }
