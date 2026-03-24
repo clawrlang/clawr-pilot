@@ -79,7 +79,7 @@ Integer* Integer¸subtract(Integer* left, Integer* right);
 Integer* Integer¸multiply(Integer* left, Integer* right);
 
 /// @brief Divide dividend by divisor (truncated toward zero), returning quotient.
-/// Panics on division by zero. Panics if divisor exceeds a single balanced digit.
+/// Panics on division by zero.
 Integer* Integer¸divide(Integer* dividend, Integer* divisor);
 
 /// @brief Raise base to a non-negative integer exponent using binary exponentiation.
