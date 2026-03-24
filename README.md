@@ -21,19 +21,24 @@ I have elected to use the `clang` compiler. This is mainly because I use a Mac, 
 
 This project is written in TypeScript for [Node.js](https://nodejs.org/en/download).
 
+> [!note]
+> Bun is used via the project dependency (not a required global install).
+> Prefer `npm run ...` scripts, or use `npx bun ...` for direct Bun commands.
+
 ```sh
 npm install
 npm run build     # Generate the rwrc executable (in ./dist)
 npm run test      # Run unit tests (skipping slow E2E tests)
 npm run test:all  # Run all automated tests (including E2E tests)
 
-# Compile a source file (after build)
-./dist/rwrc build my_prog.clawr --outdir .
+# Compile a source file (after build):
+./dist/rwrc build my_prog.clawr -o .
+# Equivalent: --outdir .
 
 # Alternative command (without building):
-npx bun src/rwrc/index.ts build my_prog.clawr --outdir .
+npx bun src/rwrc/index.ts build my_prog.clawr -o .
 
-# Run the compiled exe (from my_prog.clawr):
+# Run the compiled exe (output path is <outdir>/<source-file-base-name>):
 ./my_prog
 ```
 
