@@ -73,6 +73,7 @@ describe('parser field type annotations', () => {
         expect(program.statements[0]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
+                kind: 'field',
                 baseName: 'bitfield',
                 length: 4,
             },
@@ -80,15 +81,53 @@ describe('parser field type annotations', () => {
         expect(program.statements[1]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
+                kind: 'field',
                 baseName: 'tritfield',
                 length: 3,
             },
         })
     })
 
+    it('parses subset type annotations', () => {
+        const program = parseClawr(
+            [
+                'mut i: integer = 1',
+                'mut r: real = 3.14',
+                'mut s: string = "x"',
+                'mut t: truthvalue[false|true] = true',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'integer',
+                truthValues: null,
+            },
+        })
+        expect(program.statements[3]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'truthvalue',
+                truthValues: ['false', 'true'],
+            },
+        })
+    })
+
     it('rejects unsupported type annotation base names', () => {
-        expect(() => parseClawr('const x: integer[1] = 1', 'test')).toThrow(
-            /Only bitfield\[N\] and tritfield\[N\] type annotations are supported/,
+        expect(() => parseClawr('const x: model = 1', 'test')).toThrow(
+            /Only bitfield\[N\], tritfield\[N\], integer, real, string, and truthvalue\[\.\.\.\] type annotations are supported/,
+        )
+    })
+
+    it('rejects invalid truthvalue subset members', () => {
+        expect(() =>
+            parseClawr('const x: truthvalue[0] = true', 'test'),
+        ).toThrow(
+            /truthvalue\[\.\.\.\] annotations must list truth literals separated by \|/,
         )
     })
 

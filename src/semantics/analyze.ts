@@ -7,6 +7,7 @@ import type {
     Program,
     SourcePosition,
     Statement,
+    TypeAnnotation,
     UnaryExpression,
     VariableDeclaration,
     VariableSemantics,
@@ -134,21 +135,14 @@ function inferDeclarationBinding(
 
     if (!initializer) return null
 
-    let annotatedAllowed: ValueSet | null = null
+    const annotatedAllowed =
+        statement.typeAnnotation === null
+            ? null
+            : allowedValueSetFromTypeAnnotation(statement.typeAnnotation)
 
-    if (statement.typeAnnotation?.baseName === 'bitfield') {
-        annotatedAllowed = bitfieldSet(statement.typeAnnotation.length)
-        validateTypeAnnotationCompatibility(
-            annotatedAllowed,
-            initializer,
-            statement.position,
-            diagnostics,
-        )
-    }
-
-    if (statement.typeAnnotation?.baseName === 'tritfield') {
-        annotatedAllowed = tritfieldSet(statement.typeAnnotation.length)
-        validateTypeAnnotationCompatibility(
+    let isAnnotationCompatible = true
+    if (annotatedAllowed) {
+        isAnnotationCompatible = validateTypeAnnotationCompatibility(
             annotatedAllowed,
             initializer,
             statement.position,
@@ -173,11 +167,15 @@ function inferDeclarationBinding(
     }
 
     const allowed = annotatedAllowed ?? topForValueSet(initializer)
-    if (!isSubsetValueSet(initializer, allowed)) {
+    if (!annotatedAllowed && !isSubsetValueSet(initializer, allowed)) {
         diagnostics.push({
             position: statement.position,
             message: `initializer ${describeValueSet(initializer)} is not assignable to allowed set ${describeValueSet(allowed)}`,
         })
+    }
+
+    if (annotatedAllowed && !isAnnotationCompatible) {
+        return null
     }
 
     return {
@@ -426,13 +424,13 @@ function validateTypeAnnotationCompatibility(
     inferred: ValueSet,
     position: SourcePosition,
     diagnostics: SemanticDiagnostic[],
-) {
+): boolean {
     if (annotated.family !== inferred.family) {
         diagnostics.push({
             position,
             message: `type annotation ${describeValueSet(annotated)} is incompatible with initializer ${describeValueSet(inferred)}`,
         })
-        return
+        return false
     }
 
     if (annotated.family === 'bitfield' && inferred.family === 'bitfield') {
@@ -445,6 +443,7 @@ function validateTypeAnnotationCompatibility(
                 position,
                 message: `type annotation bitfield[${annotated.length}] is incompatible with bitfield[${inferred.length}] initializer`,
             })
+            return false
         }
     }
 
@@ -458,8 +457,19 @@ function validateTypeAnnotationCompatibility(
                 position,
                 message: `type annotation tritfield[${annotated.length}] is incompatible with tritfield[${inferred.length}] initializer`,
             })
+            return false
         }
     }
+
+    if (!isSubsetValueSet(inferred, annotated)) {
+        diagnostics.push({
+            position,
+            message: `type annotation ${describeValueSet(annotated)} is incompatible with initializer ${describeValueSet(inferred)}`,
+        })
+        return false
+    }
+
+    return true
 }
 
 function describeValueSet(valueSet: ValueSet): string {
@@ -473,6 +483,10 @@ function describeValueSet(valueSet: ValueSet): string {
         return valueSet.length === null
             ? 'tritfield'
             : `tritfield[${valueSet.length}]`
+    }
+    if (valueSet.family === 'truthvalue') {
+        if (valueSet.values.length === 3) return 'truthvalue'
+        return `truthvalue[${valueSet.values.join('|')}]`
     }
     return valueSet.family
 }
@@ -562,5 +576,29 @@ function topForValueSet(valueSet: ValueSet): ValueSet {
             return bitfieldSet()
         case 'tritfield':
             return tritfieldSet()
+    }
+}
+
+function allowedValueSetFromTypeAnnotation(
+    typeAnnotation: TypeAnnotation,
+): ValueSet {
+    if (typeAnnotation.kind === 'field') {
+        if (typeAnnotation.baseName === 'bitfield') {
+            return bitfieldSet(typeAnnotation.length)
+        }
+        return tritfieldSet(typeAnnotation.length)
+    }
+
+    switch (typeAnnotation.family) {
+        case 'integer':
+            return integerTop()
+        case 'real':
+            return realTop()
+        case 'string':
+            return stringTop()
+        case 'truthvalue':
+            return typeAnnotation.truthValues
+                ? truthvalueSet(...typeAnnotation.truthValues)
+                : truthvalueTop()
     }
 }

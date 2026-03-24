@@ -235,6 +235,39 @@ describe('semantic scaffold', () => {
         expect(semanticProgram.bindings.has('r')).toBe(false)
     })
 
+    it('supports subset declarations and checks initializer compatibility', () => {
+        const okProgram = parseClawr(
+            [
+                'mut i: integer = 42',
+                'mut t: truthvalue[false|true] = false',
+            ].join('\n'),
+            'test',
+        )
+        const ok = analyzeProgram(okProgram)
+        expect(ok.diagnostics).toEqual([])
+        expect(ok.bindingStates.get('i')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(42n),
+            allowed: integerTop(),
+        })
+        expect(ok.bindingStates.get('t')).toEqual({
+            semantics: 'mut',
+            current: truthvalueSet('false'),
+            allowed: truthvalueSet('false', 'true'),
+        })
+
+        const badProgram = parseClawr(
+            'mut t: truthvalue[false|true] = ambiguous',
+            'test',
+        )
+        const bad = analyzeProgram(badProgram)
+        expect(bad.diagnostics.map((diagnostic) => diagnostic.message)).toEqual(
+            [
+                'type annotation truthvalue[false|true] is incompatible with initializer truthvalue[ambiguous]',
+            ],
+        )
+    })
+
     it('reports family mismatch diagnostics for invalid expressions', () => {
         const program = parseClawr(
             [
@@ -256,7 +289,7 @@ describe('semantic scaffold', () => {
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
             "operator '!' requires truthvalue operand, got integer",
-            "operator '&&' requires truthvalue operands, got integer and truthvalue",
+            "operator '&&' requires truthvalue operands, got integer and truthvalue[true]",
             "operator '&' requires matching bitfield or tritfield operands, got bitfield[3] and integer",
             "operator '<' requires matching integer or real operands, got bitfield[3] and integer",
             'if predicate must be truthvalue, got integer',

@@ -7,7 +7,6 @@ import type {
     CallExpression,
     Expression,
     ExpressionStatement,
-    FieldTypeAnnotation,
     IdentifierExpression,
     IfStatement,
     IntegerLiteralExpression,
@@ -17,6 +16,7 @@ import type {
     Statement,
     StringLiteralExpression,
     SourcePosition,
+    TypeAnnotation,
     TruthLiteralExpression,
     UnaryExpression,
     VariableDeclaration,
@@ -169,7 +169,7 @@ export class Parser {
         this.stream.next({ skippingNewline: true })
 
         const ident = this.stream.expect('IDENTIFIER')
-        let typeAnnotation: FieldTypeAnnotation | null = null
+        let typeAnnotation: TypeAnnotation | null = null
         const maybeColon = this.stream.peek({ skippingNewline: true })
         if (
             maybeColon &&
@@ -177,7 +177,7 @@ export class Parser {
             maybeColon.symbol === ':'
         ) {
             this.stream.next({ skippingNewline: true })
-            typeAnnotation = this.parseFieldTypeAnnotation()
+            typeAnnotation = this.parseTypeAnnotation()
         }
         this.stream.expect('PUNCTUATION', '=')
         const initializer = this.parseExpression()
@@ -199,8 +199,41 @@ export class Parser {
         }
     }
 
-    parseFieldTypeAnnotation(): FieldTypeAnnotation {
+    parseTypeAnnotation(): TypeAnnotation {
         const typeToken = this.stream.expect('IDENTIFIER')
+        if (
+            typeToken.identifier === 'bitfield' ||
+            typeToken.identifier === 'tritfield'
+        ) {
+            return this.parseFieldTypeAnnotation(typeToken)
+        }
+
+        if (
+            typeToken.identifier === 'integer' ||
+            typeToken.identifier === 'real' ||
+            typeToken.identifier === 'string'
+        ) {
+            return {
+                kind: 'subset',
+                family: typeToken.identifier,
+                truthValues: null,
+            }
+        }
+
+        if (typeToken.identifier === 'truthvalue') {
+            return this.parseTruthvalueTypeAnnotation(typeToken)
+        }
+
+        throw parseError(
+            this.file,
+            typeToken,
+            'Only bitfield[N], tritfield[N], integer, real, string, and truthvalue[...] type annotations are supported in this vertical slice',
+        )
+    }
+
+    parseFieldTypeAnnotation(
+        typeToken: Token & { kind: 'IDENTIFIER' },
+    ): TypeAnnotation {
         if (
             typeToken.identifier !== 'bitfield' &&
             typeToken.identifier !== 'tritfield'
@@ -232,8 +265,64 @@ export class Parser {
         }
 
         return {
+            kind: 'field',
             baseName: typeToken.identifier,
             length: Number(lengthToken.value),
+        }
+    }
+
+    parseTruthvalueTypeAnnotation(
+        typeToken: Token & { kind: 'IDENTIFIER' },
+    ): TypeAnnotation {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!(next && next.kind === 'PUNCTUATION' && next.symbol === '[')) {
+            return {
+                kind: 'subset',
+                family: 'truthvalue',
+                truthValues: null,
+            }
+        }
+
+        this.stream.next({ skippingNewline: true })
+
+        const values: Array<'false' | 'ambiguous' | 'true'> = []
+        while (true) {
+            const token = this.stream.next({ skippingNewline: true })
+            if (!token || token.kind !== 'TRUTH_LITERAL') {
+                throw parseError(
+                    this.file,
+                    token ?? typeToken,
+                    'truthvalue[...] annotations must list truth literals separated by |',
+                )
+            }
+            values.push(token.value)
+
+            const separator = this.stream.peek({ skippingNewline: true })
+            if (
+                separator &&
+                separator.kind === 'OPERATOR' &&
+                separator.operator === '|'
+            ) {
+                this.stream.next({ skippingNewline: true })
+                continue
+            }
+            break
+        }
+
+        this.stream.expect('PUNCTUATION', ']')
+
+        if (values.length === 0) {
+            throw parseError(
+                this.file,
+                typeToken,
+                'truthvalue[...] annotations must include at least one literal',
+            )
+        }
+
+        return {
+            kind: 'subset',
+            family: 'truthvalue',
+            truthValues: [...new Set(values)],
         }
     }
 

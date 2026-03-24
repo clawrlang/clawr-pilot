@@ -14,9 +14,18 @@ export interface SourcePosition {
 export type VariableSemantics = 'const' | 'mut' | 'ref'
 
 export interface FieldTypeAnnotation {
+    kind: 'field'
     baseName: 'bitfield' | 'tritfield'
     length: number
 }
+
+export interface ValueSetTypeAnnotation {
+    kind: 'subset'
+    family: 'integer' | 'real' | 'truthvalue' | 'string'
+    truthValues: Array<'false' | 'ambiguous' | 'true'> | null
+}
+
+export type TypeAnnotation = FieldTypeAnnotation | ValueSetTypeAnnotation
 
 export type Statement = VariableDeclaration | ExpressionStatement | IfStatement
 
@@ -25,7 +34,7 @@ export interface VariableDeclaration {
     position: SourcePosition
     semantics: VariableSemantics
     identifier: IdentifierExpression
-    typeAnnotation: FieldTypeAnnotation | null
+    typeAnnotation: TypeAnnotation | null
     initializer: Expression
 }
 
