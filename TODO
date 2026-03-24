@@ -46,5 +46,4 @@
 
 ## Refactorings and improvements
 
-- `real`: remove current division limitation by implementing full `Integer¸divide` for multi-digit divisors (currently panics when divisor magnitude exceeds a single digit)
-- Deferred initializaton
+- Deferred initialization
