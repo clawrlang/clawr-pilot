@@ -229,7 +229,7 @@ describe('semantic scaffold', () => {
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
-            'ref is only supported for shared structures (data/object/service), got real',
+            'ref is only supported for shared structures (data/object/service), got real[3.14]',
         ])
         expect(semanticProgram.bindingStates.has('r')).toBe(false)
         expect(semanticProgram.bindings.has('r')).toBe(false)
@@ -268,6 +268,57 @@ describe('semantic scaffold', () => {
         ])
     })
 
+    it('supports complete integer range constraints in declarations and aliases', () => {
+        const program = parseClawr(
+            [
+                'subset byte = integer in [0..255]',
+                'subset signedByte = integer in [-128..<128]',
+                'subset atMostTen = integer in [...10]',
+                'subset anyInteger = integer in [...]',
+                'mut b: byte = 255',
+                'mut s: signedByte = -128',
+                'mut t: atMostTen = -100',
+                'mut a: anyInteger = 42',
+                's = 128',
+                't = 11',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindingStates.get('b')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(255n),
+            allowed: integerRange({ min: 0n, max: 255n }),
+        })
+        expect(semanticProgram.bindingStates.get('s')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(-128n),
+            allowed: integerRange({
+                min: -128n,
+                max: 128n,
+                maxInclusive: false,
+            }),
+        })
+        expect(semanticProgram.bindingStates.get('t')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(-100n),
+            allowed: integerRange({ max: 10n }),
+        })
+        expect(semanticProgram.bindingStates.get('a')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(42n),
+            allowed: integerRange({}),
+        })
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'assigned value integer[128] is not assignable to allowed set integer[-128..<128]',
+            'assigned value integer[11] is not assignable to allowed set integer[...10]',
+        ])
+    })
+
     it('supports subset aliases declared with in-constraints', () => {
         const program = parseClawr(
             [
@@ -290,7 +341,7 @@ describe('semantic scaffold', () => {
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
-            'assigned value integer is not assignable to allowed set integer',
+            'assigned value integer[-1] is not assignable to allowed set integer[0...]',
         ])
     })
 
@@ -302,7 +353,7 @@ describe('semantic scaffold', () => {
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
             "unknown subset alias 'missingAlias'",
-            'type annotation never is incompatible with initializer integer',
+            'type annotation never is incompatible with initializer integer[1]',
         ])
     })
 
@@ -358,11 +409,11 @@ describe('semantic scaffold', () => {
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
-            "operator '!' requires truthvalue operand, got integer",
-            "operator '&&' requires truthvalue operands, got integer and truthvalue[true]",
-            "operator '&' requires matching bitfield or tritfield operands, got bitfield[3] and integer",
-            "operator '<' requires matching integer or real operands, got bitfield[3] and integer",
-            'if predicate must be truthvalue, got integer',
+            "operator '!' requires truthvalue operand, got integer[1]",
+            "operator '&&' requires truthvalue operands, got integer[1] and truthvalue[true]",
+            "operator '&' requires matching bitfield or tritfield operands, got bitfield[3] and integer[1]",
+            "operator '<' requires matching integer or real operands, got bitfield[3] and integer[1]",
+            'if predicate must be truthvalue, got integer[1]',
             "unknown identifier 'missingName'",
         ])
 

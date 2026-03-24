@@ -104,6 +104,70 @@ describe('parser subset declarations', () => {
             },
         })
     })
+
+    it('parses bounded and upper-bounded integer range forms', () => {
+        const program = parseClawr(
+            [
+                'subset byte = integer in [0..255]',
+                'subset signedByte = integer in [-128..<128]',
+                'subset atMostTen = integer in [...10]',
+                'subset belowTen = integer in [...<-10]',
+                'subset anyInteger = integer in [...]',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'integer-range',
+                min: 0n,
+                max: 255n,
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'integer-range',
+                min: -128n,
+                max: 128n,
+                minInclusive: true,
+                maxInclusive: false,
+            },
+        })
+        expect(program.statements[2]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'integer-range',
+                min: null,
+                max: 10n,
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+        expect(program.statements[3]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'integer-range',
+                min: null,
+                max: -10n,
+                minInclusive: true,
+                maxInclusive: false,
+            },
+        })
+        expect(program.statements[4]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'integer-range',
+                min: null,
+                max: null,
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+    })
 })
 
 describe('parser field type annotations', () => {
@@ -138,6 +202,7 @@ describe('parser field type annotations', () => {
         const program = parseClawr(
             [
                 'mut i: integer = 1',
+                'mut withinByte: integer in [0..255] = 1',
                 'mut r: real = 3.14',
                 'mut s: string = "x"',
                 'mut t: truthvalue in {false, true} = true',
@@ -154,7 +219,22 @@ describe('parser field type annotations', () => {
                 integerRange: null,
             },
         })
-        expect(program.statements[3]).toMatchObject({
+        expect(program.statements[1]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'integer',
+                truthValues: null,
+                integerRange: {
+                    kind: 'integer-range',
+                    min: 0n,
+                    max: 255n,
+                    minInclusive: true,
+                    maxInclusive: true,
+                },
+            },
+        })
+        expect(program.statements[4]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
                 kind: 'subset',
@@ -187,6 +267,32 @@ describe('parser field type annotations', () => {
             parseClawr('const x: truthvalue in {0} = true', 'test'),
         ).toThrow(
             /truthvalue constraints must list truth literals separated by commas/,
+        )
+    })
+
+    it('rejects invalid integer range forms', () => {
+        expect(() =>
+            parseClawr('subset bad = integer in [0..]', 'test'),
+        ).toThrow(/Use \.\.\. for integer ranges with an omitted upper bound/)
+        expect(() =>
+            parseClawr('subset bad = integer in [0...10]', 'test'),
+        ).toThrow(
+            /Lower-bounded integer ranges using \.\.\. cannot specify an upper bound/,
+        )
+        expect(() =>
+            parseClawr('subset bad = integer in [..10]', 'test'),
+        ).toThrow(
+            /Use \.\.\. before the upper bound when omitting the lower bound/,
+        )
+        expect(() =>
+            parseClawr('subset bad = integer in [..<-10]', 'test'),
+        ).toThrow(
+            /Use \.\.\. before the upper bound when omitting the lower bound/,
+        )
+        expect(() =>
+            parseClawr('subset bad = integer in [..]', 'test'),
+        ).toThrow(
+            /Use \.\.\. before the upper bound when omitting the lower bound/,
         )
     })
 

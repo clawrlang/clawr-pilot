@@ -136,7 +136,7 @@ function analyzeSubsetDeclaration(
                 diagnostics.push({
                     position: statement.position,
                     message:
-                        'integer subsets only support @range in this vertical slice',
+                        'integer subsets only support range constraints in this vertical slice',
                 })
                 return
             }
@@ -182,7 +182,7 @@ function analyzeSubsetDeclaration(
                 diagnostics.push({
                     position: statement.position,
                     message:
-                        'truthvalue subsets only support @values/@except in this vertical slice',
+                        'truthvalue subsets only support set constraints in this vertical slice',
                 })
                 return
             }
@@ -664,11 +664,35 @@ function describeValueSet(valueSet: ValueSet): string {
             ? 'tritfield'
             : `tritfield[${valueSet.length}]`
     }
+    if (valueSet.family === 'integer') {
+        if (valueSet.form === 'top') return 'integer'
+        if (valueSet.form === 'singleton') return `integer[${valueSet.value}]`
+        return `integer[${describeRangeBounds(valueSet)}]`
+    }
+    if (valueSet.family === 'real') {
+        if (valueSet.form === 'top') return 'real'
+        if (valueSet.form === 'singleton') return `real[${valueSet.value}]`
+        return `real[${describeRangeBounds(valueSet)}]`
+    }
     if (valueSet.family === 'truthvalue') {
         if (valueSet.values.length === 3) return 'truthvalue'
         return `truthvalue[${valueSet.values.join('|')}]`
     }
     return valueSet.family
+}
+
+function describeRangeBounds(range: {
+    min: bigint | string | null
+    max: bigint | string | null
+    minInclusive: boolean
+    maxInclusive: boolean
+}) {
+    if (range.min === null && range.max === null) return '...'
+    if (range.min === null) {
+        return range.maxInclusive ? `...${range.max}` : `...<${range.max}`
+    }
+    if (range.max === null) return `${range.min}...`
+    return `${range.min}${range.maxInclusive ? '..' : '..<'}${range.max}`
 }
 
 function invertTruthValue(value: 'false' | 'ambiguous' | 'true') {

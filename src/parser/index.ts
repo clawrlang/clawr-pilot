@@ -244,38 +244,105 @@ export class Parser {
     } {
         this.stream.expect('PUNCTUATION', '[')
 
-        const minToken = this.stream.next({ skippingNewline: true })
-        if (!minToken) {
-            throw new Error('Unexpected EOF in integer range constraint')
-        }
-        if (minToken.kind !== 'INTEGER_LITERAL') {
-            throw parseError(
-                this.file,
-                minToken,
-                'Expected integer lower bound in range constraint',
-            )
-        }
-        this.stream.expect('OPERATOR', ['...'])
+        const min = this.parseOptionalSignedIntegerRangeBound()
+        const rangeOperator = this.stream.expect('OPERATOR', [
+            '...',
+            '..',
+            '..<',
+        ])
+        let upperExclusive = false
 
-        const maybeMax = this.stream.peek({ skippingNewline: true })
-        let max: bigint | null = null
-        if (maybeMax && maybeMax.kind === 'INTEGER_LITERAL') {
-            max = maybeMax.value
-            this.stream.next({ skippingNewline: true })
+        if (min === null && rangeOperator.operator === '...') {
+            const maybeLessThan = this.stream.peek({ skippingNewline: true })
+            if (
+                maybeLessThan &&
+                maybeLessThan.kind === 'OPERATOR' &&
+                maybeLessThan.operator === '<'
+            ) {
+                this.stream.next({ skippingNewline: true })
+                upperExclusive = true
+            }
         }
+
+        const max = this.parseOptionalSignedIntegerRangeBound()
 
         const close = this.stream.expect('PUNCTUATION', ']')
+
+        if (min !== null && rangeOperator.operator === '...') {
+            if (max !== null || upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Lower-bounded integer ranges using ... cannot specify an upper bound',
+                )
+            }
+        } else if (min !== null) {
+            if (min !== null && max === null) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... for integer ranges with an omitted upper bound',
+                )
+            }
+        } else {
+            if (rangeOperator.operator !== '...') {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... before the upper bound when omitting the lower bound',
+                )
+            }
+            if (max === null && upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Integer range must include at least one bound',
+                )
+            }
+        }
 
         return {
             constraint: {
                 kind: 'integer-range',
-                min: minToken.value,
+                min,
                 max,
                 minInclusive: true,
-                maxInclusive: true,
+                maxInclusive:
+                    min === null
+                        ? !upperExclusive
+                        : rangeOperator.operator !== '..<',
             },
             position: this.positionFromToken(close),
         }
+    }
+
+    parseOptionalSignedIntegerRangeBound(): bigint | null {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!next) return null
+
+        if (next.kind === 'INTEGER_LITERAL') {
+            this.stream.next({ skippingNewline: true })
+            return next.value
+        }
+
+        if (next.kind !== 'OPERATOR' || next.operator !== '-') {
+            return null
+        }
+
+        this.stream.next({ skippingNewline: true })
+        const magnitude = this.stream.next({ skippingNewline: true })
+        if (!magnitude) {
+            throw new Error('Unexpected EOF in integer range constraint')
+        }
+        if (magnitude.kind !== 'INTEGER_LITERAL') {
+            throw parseError(
+                this.file,
+                magnitude,
+                'Expected integer bound after - in range constraint',
+            )
+        }
+
+        return -magnitude.value
     }
 
     tryParseAssignmentStatement(): AssignmentStatement | null {
