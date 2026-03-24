@@ -15,7 +15,7 @@ import type { RuntimeType } from './lowering-types'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
 import { isRealExpression, lowerRealExpression } from './real-lowering'
 
-type TruthBaseName = 'adjust' | 'rotate'
+type TruthBaseName = 'adjust' | 'rotate' | 'modulate'
 type LoweredTruthExpression = { setup: CStatement[]; value: CExpression }
 type ComparisonOperator = Extract<
     BinaryExpression['operator'],
@@ -45,6 +45,11 @@ const TRUTH_CALLABLES: CallableRegistry<TruthBaseName> = {
         },
         rotate: {
             baseName: 'rotate',
+            arity: 2,
+            canonicalLabels: [null, 'by'],
+        },
+        modulate: {
+            baseName: 'modulate',
             arity: 2,
             canonicalLabels: [null, 'by'],
         },

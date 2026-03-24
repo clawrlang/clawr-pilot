@@ -416,7 +416,7 @@ function inferExpressionValueSet(
         case 'BinaryExpression':
             return inferBinaryValueSet(expression, bindings, diagnostics)
         case 'CallExpression':
-            return inferCallValueSet(expression, diagnostics)
+            return inferCallValueSet(expression, bindings, diagnostics)
         case 'MemberExpression':
             return null
     }
@@ -579,6 +579,7 @@ function inferBinaryValueSet(
 
 function inferCallValueSet(
     expression: CallExpression,
+    bindings: Map<string, ValueSet>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     if (expression.callee.kind !== 'Identifier') return null
@@ -587,7 +588,7 @@ function inferCallValueSet(
         expression.callee.name !== 'bitfield' &&
         expression.callee.name !== 'tritfield'
     ) {
-        return null
+        return inferTruthCallableValueSet(expression, bindings, diagnostics)
     }
 
     if (expression.arguments.length !== 1) {
@@ -620,6 +621,61 @@ function inferCallValueSet(
     }
 
     return tritfieldSet(argument.value.value.length)
+}
+
+type TruthValueAtom = 'false' | 'ambiguous' | 'true'
+
+function inferTruthCallableValueSet(
+    expression: CallExpression,
+    bindings: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
+): ValueSet | null {
+    if (expression.callee.kind !== 'Identifier') return null
+    const name = expression.callee.name
+    const args = expression.arguments
+
+    // Resolve a single argument to a truthvalue value-set, or return null.
+    function resolveTruth(argIndex: number): Array<TruthValueAtom> | null {
+        const vs = inferExpressionValueSet(
+            args[argIndex].value,
+            bindings,
+            diagnostics,
+        )
+        if (!vs || vs.family !== 'truthvalue') return null
+        return vs.values
+    }
+
+    // Binary callables: modulate(x, by: y), rotate(x, by: y), adjust(x, towards: y)
+    if (args.length === 2) {
+        let op:
+            | ((a: TruthValueAtom, b: TruthValueAtom) => TruthValueAtom)
+            | null = null
+        if (name === 'modulate') op = truthModulate
+        else if (name === 'rotate') op = truthRotateBy
+        else if (name === 'adjust') op = truthAdjTowards
+        if (op) {
+            const a = resolveTruth(0)
+            const b = resolveTruth(1)
+            if (!a || !b) return null
+            return combineTruthvalueSets(a, b, op)
+        }
+    }
+
+    // Unary aliases with bound second argument
+    if (args.length === 1) {
+        const a = resolveTruth(0)
+        if (!a) return null
+        if (name === 'rotateUp')
+            return combineTruthvalueSets(a, ['true'], truthRotateBy)
+        if (name === 'rotateDown')
+            return combineTruthvalueSets(a, ['false'], truthRotateBy)
+        if (name === 'adjustUp')
+            return combineTruthvalueSets(a, ['true'], truthAdjTowards)
+        if (name === 'adjustDown')
+            return combineTruthvalueSets(a, ['false'], truthAdjTowards)
+    }
+
+    return null
 }
 
 function validateTypeAnnotationCompatibility(
@@ -770,6 +826,35 @@ function truthOr(
     if (left === 'true' || right === 'true') return 'true'
     if (left === 'false' && right === 'false') return 'false'
     return 'ambiguous'
+}
+
+function truthRotateBy(
+    value: TruthValueAtom,
+    by: TruthValueAtom,
+): TruthValueAtom {
+    if (value === 'ambiguous') return by
+    if (by === 'ambiguous') return value
+    if (by === 'true') {
+        // rotate up: false→ambiguous, ambiguous→true, true→false
+        if (value === 'false') return 'ambiguous'
+        return 'false' // value is 'true'
+    }
+    // rotate down (by=false): false→true, ambiguous→false, true→ambiguous
+    return value === 'false' ? 'true' : 'ambiguous' // value is 'false' or 'true'
+}
+
+function truthAdjTowards(
+    value: TruthValueAtom,
+    towards: TruthValueAtom,
+): TruthValueAtom {
+    if (value === 'ambiguous') return towards
+    if (towards === 'ambiguous') return value
+    return value === towards ? value : 'ambiguous'
+}
+
+function truthModulate(a: TruthValueAtom, b: TruthValueAtom): TruthValueAtom {
+    if (a === 'ambiguous' || b === 'ambiguous') return 'ambiguous'
+    return a === b ? 'true' : 'false'
 }
 
 function realRangeFromNegation(

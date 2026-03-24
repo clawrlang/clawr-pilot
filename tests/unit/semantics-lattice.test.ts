@@ -539,3 +539,85 @@ describe('semantic scaffold', () => {
         ])
     })
 })
+
+describe('truthvalue callable narrowing', () => {
+    function infer(source: string) {
+        return analyzeProgram(parseClawr(source, 'test'))
+    }
+
+    it('infers rotate(x, by:) value set', () => {
+        // rotateUp: false→ambiguous, ambiguous→true, true→false
+        expect(
+            infer('const x = rotate(false, by: false)').bindings.get('x'),
+        ).toEqual(truthvalueSet('true'))
+        expect(
+            infer('const x = rotate(false, by: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+        expect(
+            infer('const x = rotate(true, by: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('false'))
+    })
+
+    it('infers rotateUp and rotateDown aliases', () => {
+        expect(
+            infer('const x = rotateUp(false)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+        expect(
+            infer('const x = rotateDown(true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+    })
+
+    it('infers adjust(x, towards:) value set', () => {
+        // adjust(false, towards: true) → ambiguous (mismatch)
+        expect(
+            infer('const x = adjust(false, towards: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+        // adjust(true, towards: true) → true (match)
+        expect(
+            infer('const x = adjust(true, towards: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('true'))
+        // adjust(ambiguous, towards: false) → false (ambiguous passes through)
+        expect(
+            infer('const x = adjust(ambiguous, towards: false)').bindings.get('x'),
+        ).toEqual(truthvalueSet('false'))
+    })
+
+    it('infers adjustUp and adjustDown aliases', () => {
+        expect(
+            infer('const x = adjustDown(true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+        expect(
+            infer('const x = adjustUp(false)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+    })
+
+    it('infers modulate(x, by:) value set', () => {
+        // ambiguous absorbs
+        expect(
+            infer('const x = modulate(ambiguous, by: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('ambiguous'))
+        // false * false = true (both neg → pos in balanced ternary)
+        expect(
+            infer('const x = modulate(false, by: false)').bindings.get('x'),
+        ).toEqual(truthvalueSet('true'))
+        // false * true = false
+        expect(
+            infer('const x = modulate(false, by: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('false'))
+        // true * true = true
+        expect(
+            infer('const x = modulate(true, by: true)').bindings.get('x'),
+        ).toEqual(truthvalueSet('true'))
+    })
+
+    it('infers narrowed set when input spans multiple values', () => {
+        // rotate(top, by: true) → all three values, since the rotation is a permutation
+        const program = parseClawr(
+            ['const t = ambiguous', 'const f = false', 'const x = rotate(t, by: f)'].join('\n'),
+            'test',
+        )
+        const result = analyzeProgram(program)
+        // rotate(ambiguous, by: false) = false — but here t is a singleton
+        expect(result.bindings.get('x')).toEqual(truthvalueSet('false'))
+    })
+})
