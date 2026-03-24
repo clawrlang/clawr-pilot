@@ -77,6 +77,8 @@ export class Parser {
         const functionLike = this.tryParseFunctionLikeDeclaration()
         if (functionLike) return functionLike
 
+        this.rejectUnsupportedVariableSemanticsDeclaration()
+
         if (
             token.kind === 'KEYWORD' &&
             (token.keyword === 'const' ||
@@ -87,6 +89,32 @@ export class Parser {
         }
 
         return this.parseExpressionStatement()
+    }
+
+    rejectUnsupportedVariableSemanticsDeclaration() {
+        const probe = this.stream.clone()
+        const first = probe.next({ skippingNewline: true })
+        const second = probe.next({ skippingNewline: true })
+        const third = probe.peek({ skippingNewline: true })
+
+        if (
+            !first ||
+            first.kind !== 'IDENTIFIER' ||
+            (first.identifier !== 'let' && first.identifier !== 'var') ||
+            !second ||
+            second.kind !== 'IDENTIFIER' ||
+            !third ||
+            third.kind !== 'PUNCTUATION' ||
+            third.symbol !== '='
+        ) {
+            return
+        }
+
+        throw parseError(
+            this.file,
+            first,
+            `Unsupported variable semantics '${first.identifier}'. Use const, mut, or ref.`,
+        )
     }
 
     tryParseFunctionLikeDeclaration(): FunctionDeclaration | null {

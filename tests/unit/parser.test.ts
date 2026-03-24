@@ -55,9 +55,19 @@ describe('parser variable declaration semantics', () => {
         it(`disallows ${semantics} variables`, () => {
             expect(() =>
                 parseClawr(`${semantics} x = 42`, 'test'),
-            ).toThrowError()
+            ).toThrowError(
+                new RegExp(
+                    `Unsupported variable semantics '${semantics}'. Use const, mut, or ref.`,
+                ),
+            )
         })
     }
+
+    it('includes source position in unsupported semantics diagnostics', () => {
+        expect(() => parseClawr('let x = 42', 'src/main.clawr')).toThrowError(
+            /src\/main\.clawr:1:1:/,
+        )
+    })
 })
 
 describe('parser function and method declarations', () => {
