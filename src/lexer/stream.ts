@@ -242,6 +242,8 @@ export class TokenStream {
                 return true
             case 'PUNCTUATION':
                 return ['(', '[', '{', ','].includes(prev.symbol)
+            case 'KEYWORD':
+                return prev.keyword === 'in'
             default:
                 return false
         }

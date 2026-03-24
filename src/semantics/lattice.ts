@@ -48,6 +48,20 @@ export interface TruthValueSet {
 export type StringValueSet =
     | { family: 'string'; form: 'top' }
     | { family: 'string'; form: 'singleton'; value: string }
+    | {
+          family: 'string'
+          form: 'length'
+          min: bigint | null
+          max: bigint | null
+          minInclusive: boolean
+          maxInclusive: boolean
+      }
+    | {
+          family: 'string'
+          form: 'pattern'
+          pattern: string
+          modifiers: string
+      }
 
 export interface BitfieldValueSet {
     family: 'bitfield'
@@ -178,6 +192,48 @@ export function stringSingleton(value: string): StringValueSet {
     return { family: 'string', form: 'singleton', value }
 }
 
+export function stringLengthRange(options: {
+    min?: bigint
+    max?: bigint
+    minInclusive?: boolean
+    maxInclusive?: boolean
+}): ValueSet {
+    const min = options.min ?? null
+    const max = options.max ?? null
+    const minInclusive = options.minInclusive ?? true
+    const maxInclusive = options.maxInclusive ?? true
+
+    if (min !== null && min < 0n) return neverValueSet
+    if (max !== null && max < 0n) return neverValueSet
+    if (min !== null && max !== null) {
+        if (min > max) return neverValueSet
+        if (min === max && !(minInclusive && maxInclusive)) {
+            return neverValueSet
+        }
+    }
+
+    return {
+        family: 'string',
+        form: 'length',
+        min,
+        max,
+        minInclusive,
+        maxInclusive,
+    }
+}
+
+export function stringPattern(
+    pattern: string,
+    modifiers?: string,
+): StringValueSet {
+    return {
+        family: 'string',
+        form: 'pattern',
+        pattern,
+        modifiers: [...new Set((modifiers ?? '').split(''))].sort().join(''),
+    }
+}
+
 export function bitfieldSet(length?: number): BitfieldValueSet {
     return { family: 'bitfield', length: length ?? null }
 }
@@ -202,16 +258,7 @@ export function joinValueSets(left: ValueSet, right: ValueSet): ValueSet {
                 ...(right as TruthValueSet).values,
             )
         case 'string':
-            if (
-                left.form === 'top' ||
-                (right as StringValueSet).form === 'top'
-            ) {
-                return stringTop()
-            }
-            return left.value ===
-                (right as Extract<StringValueSet, { form: 'singleton' }>).value
-                ? left
-                : stringTop()
+            return joinStringValueSets(left, right as StringValueSet)
         case 'bitfield':
             return left.length === (right as BitfieldValueSet).length
                 ? left
@@ -243,12 +290,7 @@ export function meetValueSets(left: ValueSet, right: ValueSet): ValueSet {
                 : truthvalueSet(...intersection)
         }
         case 'string':
-            if (left.form === 'top') return right as StringValueSet
-            if ((right as StringValueSet).form === 'top') return left
-            return left.value ===
-                (right as Extract<StringValueSet, { form: 'singleton' }>).value
-                ? left
-                : neverValueSet
+            return meetStringValueSets(left, right as StringValueSet)
         case 'bitfield':
             const rightBitfield = right as BitfieldValueSet
             if (left.length === null) return right as BitfieldValueSet
@@ -338,10 +380,108 @@ function equalStringValueSets(
 ): boolean {
     if (left.form !== right.form) return false
     if (left.form === 'top') return true
-    return (
-        left.value ===
-        (right as Extract<StringValueSet, { form: 'singleton' }>).value
-    )
+    if (left.form === 'singleton' && right.form === 'singleton') {
+        return left.value === right.value
+    }
+    if (left.form === 'length' && right.form === 'length') {
+        return (
+            left.min === right.min &&
+            left.max === right.max &&
+            left.minInclusive === right.minInclusive &&
+            left.maxInclusive === right.maxInclusive
+        )
+    }
+    if (left.form === 'pattern' && right.form === 'pattern') {
+        return (
+            left.pattern === right.pattern && left.modifiers === right.modifiers
+        )
+    }
+    return false
+}
+
+function joinStringValueSets(
+    left: StringValueSet,
+    right: StringValueSet,
+): StringValueSet {
+    if (left.form === 'top' || right.form === 'top') return stringTop()
+    if (left.form === 'singleton' && right.form === 'singleton') {
+        return left.value === right.value ? left : stringTop()
+    }
+
+    if (left.form === 'pattern' && right.form === 'pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? left
+            : stringTop()
+    }
+
+    if (left.form === 'pattern' && right.form === 'singleton') {
+        return matchesStringPattern(right.value, left) ? left : stringTop()
+    }
+    if (left.form === 'singleton' && right.form === 'pattern') {
+        return matchesStringPattern(left.value, right) ? right : stringTop()
+    }
+
+    const leftLength = asStringLengthRange(left)
+    const rightLength = asStringLengthRange(right)
+    if (leftLength && rightLength) {
+        return stringLengthRange({
+            min: undefinedIfNull(
+                chooseIntegerLowerBound(leftLength, rightLength),
+            ),
+            minInclusive: chooseIntegerLowerInclusive(leftLength, rightLength),
+            max: undefinedIfNull(
+                chooseIntegerUpperBound(leftLength, rightLength),
+            ),
+            maxInclusive: chooseIntegerUpperInclusive(leftLength, rightLength),
+        }) as StringValueSet
+    }
+
+    return stringTop()
+}
+
+function meetStringValueSets(
+    left: StringValueSet,
+    right: StringValueSet,
+): ValueSet {
+    if (left.form === 'top') return right
+    if (right.form === 'top') return left
+
+    if (left.form === 'singleton' && right.form === 'singleton') {
+        return left.value === right.value ? left : neverValueSet
+    }
+
+    if (left.form === 'singleton') {
+        if (right.form === 'singleton') {
+            return left.value === right.value ? left : neverValueSet
+        }
+        return isStringSingletonInConstraint(left.value, right)
+            ? left
+            : neverValueSet
+    }
+    if (right.form === 'singleton') {
+        return isStringSingletonInConstraint(right.value, left)
+            ? right
+            : neverValueSet
+    }
+
+    if (left.form === 'pattern' && right.form === 'pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? left
+            : neverValueSet
+    }
+
+    if (left.form === 'length' && right.form === 'length') {
+        return stringLengthRange({
+            min: undefinedIfNull(intersectIntegerLowerBound(left, right)),
+            minInclusive: intersectIntegerLowerInclusive(left, right),
+            max: undefinedIfNull(intersectIntegerUpperBound(left, right)),
+            maxInclusive: intersectIntegerUpperInclusive(left, right),
+        })
+    }
+
+    return neverValueSet
 }
 
 function joinIntegerValueSets(
@@ -429,6 +569,56 @@ function asRealRange(
         }
     }
     return valueSet
+}
+
+function asStringLengthRange(valueSet: StringValueSet): IntegerBounds | null {
+    if (valueSet.form === 'top' || valueSet.form === 'pattern') {
+        return null
+    }
+    if (valueSet.form === 'singleton') {
+        const length = BigInt(valueSet.value.length)
+        return {
+            min: length,
+            max: length,
+            minInclusive: true,
+            maxInclusive: true,
+        }
+    }
+    if (valueSet.form === 'length') {
+        return valueSet
+    }
+    return null
+}
+
+function isStringSingletonInConstraint(
+    value: string,
+    constraint: Exclude<StringValueSet, { form: 'top' | 'singleton' }>,
+) {
+    if (constraint.form === 'length') {
+        return isLengthWithinBounds(BigInt(value.length), constraint)
+    }
+    return matchesStringPattern(value, constraint)
+}
+
+function isLengthWithinBounds(length: bigint, bounds: IntegerBounds) {
+    if (bounds.min !== null) {
+        if (length < bounds.min) return false
+        if (length === bounds.min && !bounds.minInclusive) return false
+    }
+    if (bounds.max !== null) {
+        if (length > bounds.max) return false
+        if (length === bounds.max && !bounds.maxInclusive) return false
+    }
+    return true
+}
+
+function matchesStringPattern(
+    value: string,
+    patternValueSet: Extract<StringValueSet, { form: 'pattern' }>,
+) {
+    return new RegExp(patternValueSet.pattern, patternValueSet.modifiers).test(
+        value,
+    )
 }
 
 function ensureSameFamily(

@@ -14,6 +14,8 @@ import {
     realRange,
     realSingleton,
     realTop,
+    stringLengthRange,
+    stringPattern,
     stringTop,
     truthvalueSet,
     truthvalueTop,
@@ -356,6 +358,47 @@ describe('semantic scaffold', () => {
         ).toEqual([
             'assigned value real[1] is not assignable to allowed set real[0..<1]',
             'assigned value real[10.6] is not assignable to allowed set real[...10.5]',
+        ])
+    })
+
+    it('supports string length and regex constraints in declarations and aliases', () => {
+        const program = parseClawr(
+            [
+                'subset shortText = string in [1..8]',
+                'subset slug = string in /^[a-z0-9-]+$/',
+                'mut short: shortText = "tag"',
+                'mut s: slug = "hello-world"',
+                'short = "too long value"',
+                's = "Hello World"',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindingStates.get('short')).toEqual({
+            semantics: 'mut',
+            current: {
+                family: 'string',
+                form: 'singleton',
+                value: 'tag',
+            },
+            allowed: stringLengthRange({ min: 1n, max: 8n }),
+        })
+        expect(semanticProgram.bindingStates.get('s')).toEqual({
+            semantics: 'mut',
+            current: {
+                family: 'string',
+                form: 'singleton',
+                value: 'hello-world',
+            },
+            allowed: stringPattern('^[a-z0-9-]+$'),
+        })
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'assigned value string["too long value"] is not assignable to allowed set string[length 1..8]',
+            'assigned value string["Hello World"] is not assignable to allowed set string[/^[a-z0-9-]+$/]',
         ])
     })
 

@@ -25,6 +25,8 @@ import {
     realRange,
     realSingleton,
     realTop,
+    stringLengthRange,
+    stringPattern,
     stringSingleton,
     stringTop,
     tritfieldSet,
@@ -174,15 +176,32 @@ function analyzeSubsetDeclaration(
             break
         }
         case 'string': {
-            if (statement.constraint !== null) {
+            if (
+                statement.constraint &&
+                statement.constraint.kind !== 'string-length' &&
+                statement.constraint.kind !== 'string-pattern'
+            ) {
                 diagnostics.push({
                     position: statement.position,
                     message:
-                        'string subset directives are not supported in this vertical slice',
+                        'string subsets only support length ranges and regex constraints in this vertical slice',
                 })
                 return
             }
-            valueSet = stringTop()
+            valueSet =
+                statement.constraint?.kind === 'string-length'
+                    ? stringLengthRange({
+                          min: statement.constraint.min ?? undefined,
+                          max: statement.constraint.max ?? undefined,
+                          minInclusive: statement.constraint.minInclusive,
+                          maxInclusive: statement.constraint.maxInclusive,
+                      })
+                    : statement.constraint?.kind === 'string-pattern'
+                      ? stringPattern(
+                            statement.constraint.pattern,
+                            statement.constraint.modifiers,
+                        )
+                      : stringTop()
             break
         }
         case 'truthvalue': {
@@ -689,7 +708,17 @@ function describeValueSet(valueSet: ValueSet): string {
         if (valueSet.values.length === 3) return 'truthvalue'
         return `truthvalue[${valueSet.values.join('|')}]`
     }
-    return valueSet.family
+    if (valueSet.family === 'string') {
+        if (valueSet.form === 'top') return 'string'
+        if (valueSet.form === 'singleton') {
+            return `string[${JSON.stringify(valueSet.value)}]`
+        }
+        if (valueSet.form === 'length') {
+            return `string[length ${describeRangeBounds(valueSet)}]`
+        }
+        return `string[/${valueSet.pattern}/${valueSet.modifiers}]`
+    }
+    return 'unknown'
 }
 
 function describeRangeBounds(range: {
@@ -839,6 +868,20 @@ function allowedValueSetFromTypeAnnotation(
                   })
                 : realTop()
         case 'string':
+            if (typeAnnotation.stringLength) {
+                return stringLengthRange({
+                    min: typeAnnotation.stringLength.min ?? undefined,
+                    max: typeAnnotation.stringLength.max ?? undefined,
+                    minInclusive: typeAnnotation.stringLength.minInclusive,
+                    maxInclusive: typeAnnotation.stringLength.maxInclusive,
+                })
+            }
+            if (typeAnnotation.stringPattern) {
+                return stringPattern(
+                    typeAnnotation.stringPattern.pattern,
+                    typeAnnotation.stringPattern.modifiers,
+                )
+            }
             return stringTop()
         case 'truthvalue':
             return typeAnnotation.truthValues

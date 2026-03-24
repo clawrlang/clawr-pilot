@@ -171,6 +171,10 @@ export class Parser {
             return this.parseRealRangeConstraint()
         }
 
+        if (familyToken.identifier === 'string') {
+            return this.parseStringConstraint(familyToken)
+        }
+
         throw parseError(
             this.file,
             familyToken,
@@ -465,6 +469,130 @@ export class Parser {
         )
     }
 
+    parseStringConstraint(contextToken: Token & { kind: 'IDENTIFIER' }): {
+        constraint:
+            | Extract<SubsetConstraint, { kind: 'string-length' }>
+            | Extract<SubsetConstraint, { kind: 'string-pattern' }>
+        position: SourcePosition
+    } {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!next) {
+            throw new Error('Unexpected EOF in string constraint')
+        }
+
+        if (next.kind === 'PUNCTUATION' && next.symbol === '[') {
+            return this.parseStringLengthConstraint()
+        }
+
+        if (next.kind === 'REGEX_LITERAL') {
+            const regex = this.stream.next({ skippingNewline: true })
+            if (!regex || regex.kind !== 'REGEX_LITERAL') {
+                throw new Error('Unexpected parser state: missing regex token')
+            }
+            return {
+                constraint: {
+                    kind: 'string-pattern',
+                    pattern: regex.pattern,
+                    modifiers: regex.modifiers
+                        ? [...regex.modifiers].sort().join('')
+                        : '',
+                },
+                position: this.positionFromToken(regex),
+            }
+        }
+
+        throw parseError(
+            this.file,
+            contextToken,
+            'string constraints must be a length range like [1..8] or a regex literal',
+        )
+    }
+
+    parseStringLengthConstraint(): {
+        constraint: Extract<SubsetConstraint, { kind: 'string-length' }>
+        position: SourcePosition
+    } {
+        this.stream.expect('PUNCTUATION', '[')
+
+        const min = this.parseOptionalUnsignedIntegerRangeBound()
+        const rangeOperator = this.stream.expect('OPERATOR', [
+            '...',
+            '..',
+            '..<',
+        ])
+        let upperExclusive = false
+
+        if (min === null && rangeOperator.operator === '...') {
+            const maybeLessThan = this.stream.peek({ skippingNewline: true })
+            if (
+                maybeLessThan &&
+                maybeLessThan.kind === 'OPERATOR' &&
+                maybeLessThan.operator === '<'
+            ) {
+                this.stream.next({ skippingNewline: true })
+                upperExclusive = true
+            }
+        }
+
+        const max = this.parseOptionalUnsignedIntegerRangeBound()
+        const close = this.stream.expect('PUNCTUATION', ']')
+
+        if (min !== null && rangeOperator.operator === '...') {
+            if (max !== null || upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Lower-bounded string length ranges using ... cannot specify an upper bound',
+                )
+            }
+        } else if (min !== null) {
+            if (max === null) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... for string length ranges with an omitted upper bound',
+                )
+            }
+        } else {
+            if (rangeOperator.operator !== '...') {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'Use ... before the upper bound when omitting the lower bound',
+                )
+            }
+            if (max === null && upperExclusive) {
+                throw parseError(
+                    this.file,
+                    rangeOperator,
+                    'String length range must include at least one bound',
+                )
+            }
+        }
+
+        return {
+            constraint: {
+                kind: 'string-length',
+                min,
+                max,
+                minInclusive: true,
+                maxInclusive:
+                    min === null
+                        ? !upperExclusive
+                        : rangeOperator.operator !== '..<',
+            },
+            position: this.positionFromToken(close),
+        }
+    }
+
+    parseOptionalUnsignedIntegerRangeBound(): bigint | null {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!next) return null
+        if (next.kind !== 'INTEGER_LITERAL') return null
+        this.stream.next({ skippingNewline: true })
+        return next.value
+    }
+
     tryParseAssignmentStatement(): AssignmentStatement | null {
         const probe = this.stream.clone()
         const maybeIdentifier = probe.next({ skippingNewline: true })
@@ -668,6 +796,8 @@ export class Parser {
             truthValues: null,
             integerRange: null,
             realRange: null,
+            stringLength: null,
+            stringPattern: null,
         }
 
         const maybeIn = this.stream.peek({ skippingNewline: true })
@@ -703,6 +833,19 @@ export class Parser {
                 ...annotation,
                 realRange: parsed.constraint,
             }
+        }
+
+        if (family === 'string') {
+            const parsed = this.parseStringConstraint(typeToken)
+            return parsed.constraint.kind === 'string-length'
+                ? {
+                      ...annotation,
+                      stringLength: parsed.constraint,
+                  }
+                : {
+                      ...annotation,
+                      stringPattern: parsed.constraint,
+                  }
         }
 
         throw parseError(

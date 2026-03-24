@@ -35,6 +35,16 @@ export interface ValueSetTypeAnnotation {
         minInclusive: boolean
         maxInclusive: boolean
     } | null
+    stringLength: {
+        min: bigint | null
+        max: bigint | null
+        minInclusive: boolean
+        maxInclusive: boolean
+    } | null
+    stringPattern: {
+        pattern: string
+        modifiers: string
+    } | null
 }
 
 export interface SubsetAliasTypeAnnotation {
@@ -68,10 +78,26 @@ export interface RealRangeSubsetConstraint {
     maxInclusive: boolean
 }
 
+export interface StringLengthSubsetConstraint {
+    kind: 'string-length'
+    min: bigint | null
+    max: bigint | null
+    minInclusive: boolean
+    maxInclusive: boolean
+}
+
+export interface StringPatternSubsetConstraint {
+    kind: 'string-pattern'
+    pattern: string
+    modifiers: string
+}
+
 export type SubsetConstraint =
     | TruthValueSubsetConstraint
     | IntegerRangeSubsetConstraint
     | RealRangeSubsetConstraint
+    | StringLengthSubsetConstraint
+    | StringPatternSubsetConstraint
 
 export type Statement =
     | SubsetDeclaration

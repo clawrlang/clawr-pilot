@@ -221,6 +221,35 @@ describe('parser subset declarations', () => {
             },
         })
     })
+
+    it('parses string subset declarations with length and regex syntax', () => {
+        const program = parseClawr(
+            [
+                'subset shortText = string in [1..8]',
+                'subset slug = string in /^[a-z0-9-]+$/i',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'string-length',
+                min: 1n,
+                max: 8n,
+                minInclusive: true,
+                maxInclusive: true,
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'string-pattern',
+                pattern: '^[a-z0-9-]+$',
+                modifiers: 'i',
+            },
+        })
+    })
 })
 
 describe('parser field type annotations', () => {
@@ -259,6 +288,8 @@ describe('parser field type annotations', () => {
                 'mut r: real = 3.14',
                 'mut boundedReal: real in [0..<1] = 0.5',
                 'mut s: string = "x"',
+                'mut shortLabel: string in [1..8] = "tag"',
+                'mut slug: string in /^[a-z0-9-]+$/ = "hello-world"',
                 'mut t: truthvalue in {false, true} = true',
             ].join('\n'),
             'test',
@@ -305,6 +336,37 @@ describe('parser field type annotations', () => {
             },
         })
         expect(program.statements[5]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'string',
+                truthValues: null,
+                integerRange: null,
+                realRange: null,
+                stringLength: {
+                    kind: 'string-length',
+                    min: 1n,
+                    max: 8n,
+                    minInclusive: true,
+                    maxInclusive: true,
+                },
+            },
+        })
+        expect(program.statements[6]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'string',
+                truthValues: null,
+                integerRange: null,
+                realRange: null,
+                stringPattern: {
+                    pattern: '^[a-z0-9-]+$',
+                    modifiers: '',
+                },
+            },
+        })
+        expect(program.statements[7]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
                 kind: 'subset',
@@ -377,6 +439,22 @@ describe('parser field type annotations', () => {
         )
         expect(() => parseClawr('subset bad = real in [..1]', 'test')).toThrow(
             /Use \.\.\. before the upper bound when omitting the lower bound/,
+        )
+    })
+
+    it('rejects invalid string constraints', () => {
+        expect(() =>
+            parseClawr('subset bad = string in [0..]', 'test'),
+        ).toThrow(
+            /Use \.\.\. for string length ranges with an omitted upper bound/,
+        )
+        expect(() =>
+            parseClawr('subset bad = string in [..8]', 'test'),
+        ).toThrow(
+            /Use \.\.\. before the upper bound when omitting the lower bound/,
+        )
+        expect(() => parseClawr('subset bad = string in true', 'test')).toThrow(
+            /string constraints must be a length range like \[1\.\.8\] or a regex literal/,
         )
     })
 

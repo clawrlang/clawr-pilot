@@ -17,6 +17,8 @@ export {
     realRange,
     realSingleton,
     realTop,
+    stringLengthRange,
+    stringPattern,
     stringSingleton,
     stringTop,
     tritfieldSet,
