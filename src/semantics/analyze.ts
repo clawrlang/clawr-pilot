@@ -8,6 +8,7 @@ import type {
     Program,
     SourcePosition,
     Statement,
+    SubsetDeclaration,
     TypeAnnotation,
     UnaryExpression,
     VariableDeclaration,
@@ -52,10 +53,17 @@ export interface SemanticProgram {
 export function analyzeProgram(program: Program): SemanticProgram {
     const bindings = new Map<string, ValueSet>()
     const bindingStates = new Map<string, SemanticBinding>()
+    const subsetAliases = new Map<string, ValueSet>()
     const diagnostics: SemanticDiagnostic[] = []
 
     for (const statement of program.statements) {
-        analyzeStatement(statement, bindings, bindingStates, diagnostics)
+        analyzeStatement(
+            statement,
+            bindings,
+            bindingStates,
+            subsetAliases,
+            diagnostics,
+        )
     }
 
     return { bindings, bindingStates, diagnostics }
@@ -65,13 +73,19 @@ function analyzeStatement(
     statement: Statement,
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
+    subsetAliases: Map<string, ValueSet>,
     diagnostics: SemanticDiagnostic[],
 ) {
     switch (statement.kind) {
+        case 'SubsetDeclaration': {
+            analyzeSubsetDeclaration(statement, subsetAliases, diagnostics)
+            return
+        }
         case 'VariableDeclaration': {
             const inferred = inferDeclarationBinding(
                 statement,
                 bindings,
+                subsetAliases,
                 diagnostics,
             )
             if (inferred) {
@@ -94,10 +108,101 @@ function analyzeStatement(
             return
         }
         case 'IfStatement': {
-            analyzeIfStatement(statement, bindings, bindingStates, diagnostics)
+            analyzeIfStatement(
+                statement,
+                bindings,
+                bindingStates,
+                subsetAliases,
+                diagnostics,
+            )
             return
         }
     }
+}
+
+function analyzeSubsetDeclaration(
+    statement: SubsetDeclaration,
+    subsetAliases: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    let valueSet: ValueSet
+
+    switch (statement.family) {
+        case 'integer': {
+            if (
+                statement.constraint &&
+                statement.constraint.kind !== 'integer-range'
+            ) {
+                diagnostics.push({
+                    position: statement.position,
+                    message:
+                        'integer subsets only support @range in this vertical slice',
+                })
+                return
+            }
+            valueSet = statement.constraint
+                ? integerRange({
+                      min: statement.constraint.min ?? undefined,
+                      max: statement.constraint.max ?? undefined,
+                      minInclusive: statement.constraint.minInclusive,
+                      maxInclusive: statement.constraint.maxInclusive,
+                  })
+                : integerTop()
+            break
+        }
+        case 'real': {
+            if (statement.constraint !== null) {
+                diagnostics.push({
+                    position: statement.position,
+                    message:
+                        'real subset directives are not supported in this vertical slice',
+                })
+                return
+            }
+            valueSet = realTop()
+            break
+        }
+        case 'string': {
+            if (statement.constraint !== null) {
+                diagnostics.push({
+                    position: statement.position,
+                    message:
+                        'string subset directives are not supported in this vertical slice',
+                })
+                return
+            }
+            valueSet = stringTop()
+            break
+        }
+        case 'truthvalue': {
+            if (
+                statement.constraint &&
+                statement.constraint.kind !== 'truthvalue-values'
+            ) {
+                diagnostics.push({
+                    position: statement.position,
+                    message:
+                        'truthvalue subsets only support @values/@except in this vertical slice',
+                })
+                return
+            }
+
+            valueSet = statement.constraint
+                ? truthvalueSet(...statement.constraint.values)
+                : truthvalueTop()
+            break
+        }
+    }
+
+    if (valueSet.family === 'never') {
+        diagnostics.push({
+            position: statement.position,
+            message: `subset '${statement.identifier.name}' resolves to an empty set`,
+        })
+        return
+    }
+
+    subsetAliases.set(statement.identifier.name, valueSet)
 }
 
 function analyzeAssignmentStatement(
@@ -150,6 +255,7 @@ function analyzeIfStatement(
     statement: IfStatement,
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
+    subsetAliases: Map<string, ValueSet>,
     diagnostics: SemanticDiagnostic[],
 ) {
     const predicate = inferExpressionValueSet(
@@ -168,19 +274,32 @@ function analyzeIfStatement(
     const thenBindings = new Map(bindings)
     const thenBindingStates = new Map(bindingStates)
     for (const child of statement.thenStatements) {
-        analyzeStatement(child, thenBindings, thenBindingStates, diagnostics)
+        analyzeStatement(
+            child,
+            thenBindings,
+            thenBindingStates,
+            subsetAliases,
+            diagnostics,
+        )
     }
 
     const elseBindings = new Map(bindings)
     const elseBindingStates = new Map(bindingStates)
     for (const child of statement.elseStatements) {
-        analyzeStatement(child, elseBindings, elseBindingStates, diagnostics)
+        analyzeStatement(
+            child,
+            elseBindings,
+            elseBindingStates,
+            subsetAliases,
+            diagnostics,
+        )
     }
 }
 
 function inferDeclarationBinding(
     statement: VariableDeclaration,
     bindings: Map<string, ValueSet>,
+    subsetAliases: Map<string, ValueSet>,
     diagnostics: SemanticDiagnostic[],
 ): SemanticBinding | null {
     const initializer = inferExpressionValueSet(
@@ -194,7 +313,12 @@ function inferDeclarationBinding(
     const annotatedAllowed =
         statement.typeAnnotation === null
             ? null
-            : allowedValueSetFromTypeAnnotation(statement.typeAnnotation)
+            : allowedValueSetFromTypeAnnotation(
+                  statement.typeAnnotation,
+                  subsetAliases,
+                  statement.position,
+                  diagnostics,
+              )
 
     let isAnnotationCompatible = true
     if (annotatedAllowed) {
@@ -637,12 +761,27 @@ function topForValueSet(valueSet: ValueSet): ValueSet {
 
 function allowedValueSetFromTypeAnnotation(
     typeAnnotation: TypeAnnotation,
+    subsetAliases: Map<string, ValueSet>,
+    position: SourcePosition,
+    diagnostics: SemanticDiagnostic[],
 ): ValueSet {
     if (typeAnnotation.kind === 'field') {
         if (typeAnnotation.baseName === 'bitfield') {
             return bitfieldSet(typeAnnotation.length)
         }
         return tritfieldSet(typeAnnotation.length)
+    }
+
+    if (typeAnnotation.kind === 'subset-alias') {
+        const resolved = subsetAliases.get(typeAnnotation.name)
+        if (!resolved) {
+            diagnostics.push({
+                position,
+                message: `unknown subset alias '${typeAnnotation.name}'`,
+            })
+            return neverValueSet
+        }
+        return resolved
     }
 
     switch (typeAnnotation.family) {

@@ -268,6 +268,44 @@ describe('semantic scaffold', () => {
         )
     })
 
+    it('supports subset aliases declared with directives', () => {
+        const program = parseClawr(
+            [
+                'subset boolean = truthvalue @except(ambiguous)',
+                'subset natural = integer @range(0...)',
+                'mut b: boolean = true',
+                'mut n: natural = 42',
+                'n = -1',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindingStates.get('b')).toEqual({
+            semantics: 'mut',
+            current: truthvalueSet('true'),
+            allowed: truthvalueSet('false', 'true'),
+        })
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'assigned value integer is not assignable to allowed set integer',
+        ])
+    })
+
+    it('reports unknown subset aliases in annotations', () => {
+        const program = parseClawr('mut x: missingAlias = 1', 'test')
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "unknown subset alias 'missingAlias'",
+            'type annotation never is incompatible with initializer integer',
+        ])
+    })
+
     it('supports mut assignment and rejects const assignment', () => {
         const program = parseClawr(
             ['mut x = 1', 'x = 2', 'const y = 1', 'y = 2'].join('\n'),

@@ -25,13 +25,47 @@ export interface ValueSetTypeAnnotation {
     truthValues: Array<'false' | 'ambiguous' | 'true'> | null
 }
 
-export type TypeAnnotation = FieldTypeAnnotation | ValueSetTypeAnnotation
+export interface SubsetAliasTypeAnnotation {
+    kind: 'subset-alias'
+    name: string
+}
+
+export type TypeAnnotation =
+    | FieldTypeAnnotation
+    | ValueSetTypeAnnotation
+    | SubsetAliasTypeAnnotation
+
+export interface TruthValueSubsetConstraint {
+    kind: 'truthvalue-values'
+    values: Array<'false' | 'ambiguous' | 'true'>
+}
+
+export interface IntegerRangeSubsetConstraint {
+    kind: 'integer-range'
+    min: bigint | null
+    max: bigint | null
+    minInclusive: boolean
+    maxInclusive: boolean
+}
+
+export type SubsetConstraint =
+    | TruthValueSubsetConstraint
+    | IntegerRangeSubsetConstraint
 
 export type Statement =
+    | SubsetDeclaration
     | VariableDeclaration
     | AssignmentStatement
     | ExpressionStatement
     | IfStatement
+
+export interface SubsetDeclaration {
+    kind: 'SubsetDeclaration'
+    position: SourcePosition
+    identifier: IdentifierExpression
+    family: 'integer' | 'real' | 'truthvalue' | 'string'
+    constraint: SubsetConstraint | null
+}
 
 export interface VariableDeclaration {
     kind: 'VariableDeclaration'

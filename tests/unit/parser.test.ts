@@ -72,6 +72,43 @@ describe('parser assignments', () => {
     })
 })
 
+describe('parser subset declarations', () => {
+    it('parses truthvalue subset declarations with @except', () => {
+        const program = parseClawr(
+            'subset boolean = truthvalue @except(ambiguous)',
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            identifier: { name: 'boolean' },
+            family: 'truthvalue',
+            constraint: {
+                kind: 'truthvalue-values',
+                values: ['false', 'true'],
+            },
+        })
+    })
+
+    it('parses integer subset declarations with @range', () => {
+        const program = parseClawr(
+            'subset natural = integer @range(0...)',
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            identifier: { name: 'natural' },
+            family: 'integer',
+            constraint: {
+                kind: 'integer-range',
+                min: 0n,
+                max: null,
+            },
+        })
+    })
+})
+
 describe('parser field type annotations', () => {
     it('parses bitfield and tritfield type annotations', () => {
         const program = parseClawr(
@@ -129,10 +166,22 @@ describe('parser field type annotations', () => {
         })
     })
 
-    it('rejects unsupported type annotation base names', () => {
-        expect(() => parseClawr('const x: model = 1', 'test')).toThrow(
-            /Only bitfield\[N\], tritfield\[N\], integer, real, string, and truthvalue\[\.\.\.\] type annotations are supported/,
+    it('parses named subset aliases in type annotations', () => {
+        const program = parseClawr(
+            [
+                'subset natural = integer @range(0...)',
+                'mut n: natural = 1',
+            ].join('\n'),
+            'test',
         )
+
+        expect(program.statements[1]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset-alias',
+                name: 'natural',
+            },
+        })
     })
 
     it('rejects invalid truthvalue subset members', () => {

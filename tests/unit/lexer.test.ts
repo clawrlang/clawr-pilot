@@ -151,7 +151,20 @@ describe('it tokenizes', () => {
     })
 
     describe('punctuation', () => {
-        const tests = ['=', '[', ']', '(', ')', '{', '}', ',', '->', '=>']
+        const tests = [
+            '=',
+            '[',
+            ']',
+            '(',
+            ')',
+            '{',
+            '}',
+            ',',
+            ':',
+            '@',
+            '->',
+            '=>',
+        ]
         for (const symbol of tests) {
             test(symbol, () => {
                 const tokens = [...tokenize(symbol)]

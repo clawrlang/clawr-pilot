@@ -153,6 +153,10 @@ function lowerStatement(
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
+    if (statement.kind === 'SubsetDeclaration') {
+        return
+    }
+
     if (statement.kind === 'IfStatement') {
         lowerIfStatement(
             statement,
