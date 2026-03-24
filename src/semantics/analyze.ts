@@ -159,6 +159,31 @@ function inferCallArgumentSemanticsClass(
     return 'isolated'
 }
 
+function isAcceptedRefArgumentExpression(
+    expression: Expression,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
+): boolean {
+    if (expression.kind === 'Identifier') {
+        return bindingStates.get(expression.name)?.semantics === 'ref'
+    }
+
+    if (
+        expression.kind === 'CallExpression' &&
+        expression.callee.kind === 'Identifier'
+    ) {
+        const signature = functionSignatures.get(
+            functionSignatureKey(
+                expression.callee.name,
+                expression.arguments.length,
+            ),
+        )
+        return signature?.returnSemantics === 'ref'
+    }
+
+    return false
+}
+
 function validateFunctionCallSemantics(
     call: CallExpression,
     signature: FunctionSignature,
@@ -188,11 +213,28 @@ function validateFunctionCallSemantics(
             continue
         }
 
-        if (parameter.mode === 'ref' && semantics === 'isolated') {
-            diagnostics.push({
-                position: call.position,
-                message: `argument ${i + 1} for parameter '${parameter.name}' requires shared ref semantics, got isolated`,
-            })
+        if (parameter.mode === 'ref') {
+            if (
+                isAcceptedRefArgumentExpression(
+                    argument.value,
+                    bindingStates,
+                    functionSignatures,
+                )
+            ) {
+                continue
+            }
+
+            if (semantics === 'isolated') {
+                diagnostics.push({
+                    position: call.position,
+                    message: `argument ${i + 1} for parameter '${parameter.name}' must be a ref variable or a function returning ref`,
+                })
+            } else {
+                diagnostics.push({
+                    position: call.position,
+                    message: `argument ${i + 1} for parameter '${parameter.name}' requires shared ref semantics, got ${semantics}`,
+                })
+            }
         }
     }
 }

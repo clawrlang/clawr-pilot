@@ -264,11 +264,11 @@ describe('semantic scaffold', () => {
             'test',
         )
         const bad = analyzeProgram(badProgram)
-        expect(
-            bad.diagnostics.map((diagnostic) => diagnostic.message),
-        ).toEqual([
-            'type annotation truthvalue[false|true] is incompatible with initializer truthvalue[ambiguous]',
-        ])
+        expect(bad.diagnostics.map((diagnostic) => diagnostic.message)).toEqual(
+            [
+                'type annotation truthvalue[false|true] is incompatible with initializer truthvalue[ambiguous]',
+            ],
+        )
     })
 
     it('supports complete integer range constraints in declarations and aliases', () => {
@@ -522,7 +522,9 @@ describe('semantic scaffold', () => {
         ])
 
         expect(
-            semanticProgram.diagnostics.map((diagnostic) => diagnostic.position),
+            semanticProgram.diagnostics.map(
+                (diagnostic) => diagnostic.position,
+            ),
         ).toEqual([
             { file: 'test', line: 3, column: 18, endLine: 3, endColumn: 19 },
             { file: 'test', line: 4, column: 20, endLine: 4, endColumn: 28 },
@@ -558,7 +560,30 @@ describe('function parameter mode call checks', () => {
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
-            "argument 1 for parameter 'x' requires shared ref semantics, got isolated",
+            "argument 1 for parameter 'x' must be a ref variable or a function returning ref",
+        ])
+    })
+
+    it('rejects non-ref call expressions passed to ref parameters', () => {
+        const program = parseClawr(
+            [
+                'func makeIsolated() -> integer {',
+                '  const z = 1',
+                '}',
+                'func takesRef(x: ref integer) -> integer {',
+                '  const y = 1',
+                '}',
+                'takesRef(makeIsolated())',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "argument 1 for parameter 'x' must be a ref variable or a function returning ref",
         ])
     })
 
@@ -609,12 +634,12 @@ describe('truthvalue callable narrowing', () => {
     })
 
     it('infers rotateUp and rotateDown aliases', () => {
-        expect(
-            infer('const x = rotateUp(false)').bindings.get('x'),
-        ).toEqual(truthvalueSet('ambiguous'))
-        expect(
-            infer('const x = rotateDown(true)').bindings.get('x'),
-        ).toEqual(truthvalueSet('ambiguous'))
+        expect(infer('const x = rotateUp(false)').bindings.get('x')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
+        expect(infer('const x = rotateDown(true)').bindings.get('x')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
     })
 
     it('infers adjust(x, towards:) value set', () => {
@@ -628,17 +653,19 @@ describe('truthvalue callable narrowing', () => {
         ).toEqual(truthvalueSet('true'))
         // adjust(ambiguous, towards: false) → false (ambiguous passes through)
         expect(
-            infer('const x = adjust(ambiguous, towards: false)').bindings.get('x'),
+            infer('const x = adjust(ambiguous, towards: false)').bindings.get(
+                'x',
+            ),
         ).toEqual(truthvalueSet('false'))
     })
 
     it('infers adjustUp and adjustDown aliases', () => {
-        expect(
-            infer('const x = adjustDown(true)').bindings.get('x'),
-        ).toEqual(truthvalueSet('ambiguous'))
-        expect(
-            infer('const x = adjustUp(false)').bindings.get('x'),
-        ).toEqual(truthvalueSet('ambiguous'))
+        expect(infer('const x = adjustDown(true)').bindings.get('x')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
+        expect(infer('const x = adjustUp(false)').bindings.get('x')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
     })
 
     it('infers modulate(x, by:) value set', () => {
@@ -663,7 +690,11 @@ describe('truthvalue callable narrowing', () => {
     it('infers narrowed set when input spans multiple values', () => {
         // rotate(top, by: true) → all three values, since the rotation is a permutation
         const program = parseClawr(
-            ['const t = ambiguous', 'const f = false', 'const x = rotate(t, by: f)'].join('\n'),
+            [
+                'const t = ambiguous',
+                'const f = false',
+                'const x = rotate(t, by: f)',
+            ].join('\n'),
             'test',
         )
         const result = analyzeProgram(program)
@@ -733,7 +764,10 @@ describe('if/else branch-local narrowing', () => {
 
     it('skips unreachable then-branch for known false predicate', () => {
         const program = parseClawr(
-            ['const p = false', 'if (p) { const x = 1 } else { const y = 2 }'].join('\n'),
+            [
+                'const p = false',
+                'if (p) { const x = 1 } else { const y = 2 }',
+            ].join('\n'),
             'test',
         )
 
@@ -743,7 +777,10 @@ describe('if/else branch-local narrowing', () => {
 
     it('skips unreachable else-branch for known true predicate', () => {
         const program = parseClawr(
-            ['const p = true', 'if (p) { const x = 1 } else { const y = 2 }'].join('\n'),
+            [
+                'const p = true',
+                'if (p) { const x = 1 } else { const y = 2 }',
+            ].join('\n'),
             'test',
         )
 
