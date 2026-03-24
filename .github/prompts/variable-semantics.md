@@ -173,11 +173,13 @@ Use this checklist when implementing semantics in parser, semantic analysis, and
 - `-> ref T`: only allow returning shared memory.
 - `-> const T`: only allow returning isolated memory.
 - `-> T`: require unique return transport; if proof is non-trivial in V1, conservatively normalize.
+- Note: `-> const T` might be redundant and replaceable with `-> T` in all cases.
 
 6. Mutation Lowering
 
 - For isolated mutation sites, call `mutateRC()` before in-place mutation.
 - For shared mutation sites, never call `mutateRC()` to force isolation.
+- Note: Calling `mutateRC()` is not harmful. Pruning calls can be viewed as a form of optimisation.
 
 7. Temporary Ownership
 
@@ -246,6 +248,174 @@ Rationale:
 - `.copy()` works uniformly for all entity families, including encapsulated `object` values.
 - Spread is ergonomic for data literals and aligns with existing developer intuition.
 - Keeping `.copy()` canonical avoids ambiguity in parameter/assignment diagnostics and keeps conversion intent obvious.
+
+### Implementation Tickets (V1)
+
+This section turns the V1 spec into concrete implementation tickets, grouped by subsystem and ordered by dependency.
+
+#### Parser and AST
+
+0. `SEM-PARSE-000` Function and method declaration parsing foundation
+  - Scope: Implement parser and AST support for function declarations and/or method declarations as a prerequisite for parameter and return semantics parsing.
+  - Targets: `src/parser/index.ts`, `src/ast/index.ts`.
+  - Acceptance criteria:
+    - Parser recognizes function declarations.
+    - Parser recognizes method declarations, or documents method parsing as an explicitly deferred follow-up.
+    - AST nodes exist for parsed function/method declarations with parameter and return slots ready for semantics extensions.
+
+1. `SEM-PARSE-001` Variable semantics syntax stabilization
+   - Scope: Ensure variable declarations are parsed with semantics exactly `const | mut | ref`.
+   - Targets: `src/parser/index.ts`, `src/ast/index.ts`.
+   - Acceptance criteria:
+     - Parser accepts all three semantics in declarations.
+     - AST carries semantics without fallback aliases.
+     - Parser rejects unknown semantics keywords with clear diagnostics.
+
+2. `SEM-PARSE-002` Parameter mode parsing
+   - Scope: Parse function parameters with implicit `in` and explicit `in|const|mut|ref` modes.
+   - Prerequisite: `SEM-PARSE-000`.
+   - Targets: `src/parser/index.ts`, `src/ast/index.ts`.
+   - Acceptance criteria:
+     - `SEM-PARSE-000` is completed before parameter-mode parsing is enabled.
+     - Omitted mode is represented as `in` in AST.
+     - Explicit `in`, `const`, `mut`, `ref` parse correctly.
+     - Ambiguous parameter syntax is rejected deterministically.
+
+3. `SEM-PARSE-003` Return mode parsing
+   - Scope: Parse and represent return categories: `-> T`, `-> const T`, `-> ref T`.
+   - Targets: `src/parser/index.ts`, `src/ast/index.ts`.
+   - Acceptance criteria:
+     - AST distinguishes unique-return (`-> T`) from fixed-semantics returns.
+     - `-> const T` and `-> ref T` are preserved through AST.
+     - Invalid return semantic modifiers produce diagnostics.
+
+#### Semantic Analysis
+
+4. `SEM-ANALYZE-001` Entity-family eligibility for `ref`
+   - Scope: Permit `ref` only for `data|object|service` families.
+   - Targets: `src/semantics/analyze.ts`, `src/semantics/index.ts`.
+   - Acceptance criteria:
+     - `ref` binding of non-entity values is rejected.
+     - Diagnostic explicitly names allowed families.
+     - Existing scalar value-set analysis remains unchanged.
+
+4b. `SEM-ANALYZE-001B` Service family semantics restriction
+   - Scope: Enforce the converse rule for `service`: service values are only valid with `ref` semantics.
+   - Targets: `src/semantics/analyze.ts`, `src/semantics/index.ts`.
+   - Acceptance criteria:
+     - Binding a `service` value to `const` or `mut` is rejected.
+     - Binding a `service` value to `ref` is accepted.
+     - Diagnostic explicitly states that `service` requires `ref` semantics.
+
+5. `SEM-ANALYZE-002` Expression semantics-class tracking
+   - Scope: Add checker-level tracking for `isolated | shared | unique-return` alongside value-set inference.
+   - Targets: `src/semantics/analyze.ts`.
+   - Acceptance criteria:
+     - Variable reads map to `isolated` (`const|mut`) and `shared` (`ref`).
+     - `copy()` expressions map to `unique-return`.
+     - Assignment logic can read semantics class and value-set simultaneously.
+
+6. `SEM-ANALYZE-003` Assignment compatibility matrix
+   - Scope: Enforce semantic model compatibility for all assignments.
+   - Targets: `src/semantics/analyze.ts`.
+   - Acceptance criteria:
+     - isolated->isolated and shared->shared allowed.
+     - isolated<->shared rejected unless explicit `copy()` at expression level.
+     - `unique-return` commits to receiver semantics (`const|mut` => isolated, `ref` => shared).
+
+7. `SEM-ANALYZE-004` Parameter compatibility matrix
+   - Scope: Enforce call-site compatibility for `in|const|mut|ref` parameters.
+   - Targets: `src/semantics/analyze.ts`.
+   - Acceptance criteria:
+     - `in` accepts all three binding semantics.
+     - `const|mut` reject shared arguments.
+     - `ref` rejects isolated arguments.
+     - No implicit semantic-conversion copy is inserted by analyzer.
+
+8. `SEM-ANALYZE-005` Return mode checking
+   - Scope: Validate return expressions against `-> T | -> const T | -> ref T`.
+   - Targets: `src/semantics/analyze.ts`.
+   - Acceptance criteria:
+     - `-> ref T` requires `shared` expression class.
+     - `-> const T` requires `isolated` expression class.
+     - `-> T` requires `unique-return` or marks return as requiring conservative normalization.
+
+#### Codegen and Runtime Integration
+
+9. `SEM-CODEGEN-001` Mutation strategy tagging and lowering
+   - Scope: Lower mutations with explicit strategy: `isolated-cow` or `shared-in-place`.
+   - Targets: `src/codegen/index.ts`, `src/codegen/lowering-types.ts`.
+   - Acceptance criteria:
+     - Isolated mutations emit `mutateRC(var)` before mutation.
+  - Shared mutations may emit `mutateRC(var)` without semantic harm; eliding such calls is an optimization, not a correctness requirement.
+     - Existing scalar/runtime lowering behavior remains intact.
+
+10. `SEM-CODEGEN-002` Unique-return transport in expressions
+    - Scope: Encode move-style transport for `-> T` temporaries.
+    - Targets: `src/codegen/index.ts`.
+    - Acceptance criteria:
+      - Assignment from unique-return does not retain.
+      - Discarded unique-return values are released exactly once.
+      - Forwarded temporaries preserve single-owner transfer semantics.
+
+11. `SEM-CODEGEN-003` Conservative return normalization path
+    - Scope: Add conservative normalization for uncertain `-> T` returns in V1.
+    - Targets: `src/codegen/index.ts`, `src/runtime/refc.c`, `src/runtime/include/refc.h`.
+    - Acceptance criteria:
+      - Non-trivially unique isolated return paths are normalized before returning.
+      - Normalization preserves semantics rules and does not silently convert shared to isolated.
+      - Generated C compiles and passes runtime tests.
+
+12. `SEM-RUNTIME-001` Canonical explicit-copy primitive
+    - Scope: Ensure runtime has a canonical helper path for explicit semantic conversion copy.
+    - Targets: `src/runtime/refc.c`, `src/runtime/include/refc.h`, `src/codegen/index.ts`.
+    - Acceptance criteria:
+      - Codegen can emit explicit copy operation for cross-semantics assignment.
+      - Resulting allocation is uniquely referenced.
+      - Nested retained fields are handled correctly via type metadata hooks.
+
+#### Test Plan Tickets
+
+13. `SEM-TEST-001` Semantic compatibility matrix tests
+    - Scope: Add unit tests for assignment and parameter compatibility combinations.
+    - Targets: `tests/unit/**/*.test.ts` (primarily semantics tests).
+    - Acceptance criteria:
+      - Full matrix coverage for source semantics vs destination semantics.
+      - Diagnostics assert explicit-copy requirement wording.
+
+14. `SEM-TEST-002` Return semantics tests
+    - Scope: Add unit tests for `-> T`, `-> const T`, `-> ref T` behavior.
+    - Targets: `tests/unit/**/*.test.ts`.
+    - Acceptance criteria:
+      - Positive and negative coverage for each return category.
+      - Non-trivial `-> T` paths verify conservative behavior.
+
+15. `SEM-TEST-003` E2E ownership and temporary tests
+    - Scope: Add end-to-end tests for temporary forwarding, chaining, and discarded unique returns.
+    - Targets: `tests/e2e/**/*.test.ts`, `tests/e2e/cases/*`.
+    - Acceptance criteria:
+      - No leaks or double-release behavior in tested flows.
+      - Chained expressions preserve move semantics.
+      - Runtime behavior matches semantic contracts for isolated vs shared mutation.
+
+#### Execution Order
+
+Recommended dependency order for implementation:
+
+1. `SEM-PARSE-000..003`
+2. `SEM-ANALYZE-001`, `SEM-ANALYZE-001B`, `SEM-ANALYZE-002..005`
+3. `SEM-CODEGEN-001..003`
+4. `SEM-RUNTIME-001`
+5. `SEM-TEST-001..003`
+
+#### Definition of Done (V1)
+
+V1 is done when:
+
+- Parser/AST can represent all declared semantics modes.
+- Analyzer enforces assignment, parameter, and return compatibility without implicit conversions.
+- Codegen and runtime preserve separation between explicit `copy()` and CoW via `mutateRC()`.
+- Unique-return temporary ownership is handled without leaks or double-free behavior in e2e tests.
 
 | Keyword | Mutability | Semantics              | Use Case             |
 | ------- | ---------- | ---------------------- | -------------------- |
