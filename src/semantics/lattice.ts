@@ -278,15 +278,11 @@ export function equalValueSets(left: ValueSet, right: ValueSet): boolean {
 
     switch (left.family) {
         case 'integer':
-            return JSON.stringify(left) === JSON.stringify(right)
+            return equalIntegerValueSets(left, right as IntegerValueSet)
         case 'real':
-            return (
-                JSON.stringify(left) === JSON.stringify(right as RealValueSet)
-            )
+            return equalRealValueSets(left, right as RealValueSet)
         case 'string':
-            return (
-                JSON.stringify(left) === JSON.stringify(right as StringValueSet)
-            )
+            return equalStringValueSets(left, right as StringValueSet)
         case 'truthvalue':
             return (
                 JSON.stringify(left.values) ===
@@ -297,6 +293,55 @@ export function equalValueSets(left: ValueSet, right: ValueSet): boolean {
         case 'tritfield':
             return left.length === (right as TritfieldValueSet).length
     }
+}
+
+function equalIntegerValueSets(
+    left: IntegerValueSet,
+    right: IntegerValueSet,
+): boolean {
+    if (left.form !== right.form) return false
+    if (left.form === 'top') return true
+    if (left.form === 'singleton' && right.form === 'singleton') {
+        return left.value === right.value
+    }
+    if (left.form === 'range' && right.form === 'range') {
+        return (
+            left.min === right.min &&
+            left.max === right.max &&
+            left.minInclusive === right.minInclusive &&
+            left.maxInclusive === right.maxInclusive
+        )
+    }
+    return false
+}
+
+function equalRealValueSets(left: RealValueSet, right: RealValueSet): boolean {
+    if (left.form !== right.form) return false
+    if (left.form === 'top') return true
+    if (left.form === 'singleton' && right.form === 'singleton') {
+        return left.value === right.value
+    }
+    if (left.form === 'range' && right.form === 'range') {
+        return (
+            left.min === right.min &&
+            left.max === right.max &&
+            left.minInclusive === right.minInclusive &&
+            left.maxInclusive === right.maxInclusive
+        )
+    }
+    return false
+}
+
+function equalStringValueSets(
+    left: StringValueSet,
+    right: StringValueSet,
+): boolean {
+    if (left.form !== right.form) return false
+    if (left.form === 'top') return true
+    return (
+        left.value ===
+        (right as Extract<StringValueSet, { form: 'singleton' }>).value
+    )
 }
 
 function joinIntegerValueSets(

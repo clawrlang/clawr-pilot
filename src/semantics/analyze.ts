@@ -9,16 +9,23 @@ import type {
     Statement,
     UnaryExpression,
     VariableDeclaration,
+    VariableSemantics,
 } from '../ast'
 import {
     bitfieldSet,
     integerRange,
     integerSingleton,
     integerTop,
+    isSubsetValueSet,
     meetValueSets,
+    neverValueSet,
     realSingleton,
     realTop,
+    stringSingleton,
+    stringTop,
+    tritfieldSet,
     truthvalueSet,
+    truthvalueTop,
     type ValueSet,
 } from './lattice'
 
@@ -27,36 +34,47 @@ export interface SemanticDiagnostic {
     message: string
 }
 
+export interface SemanticBinding {
+    semantics: VariableSemantics
+    current: ValueSet
+    allowed: ValueSet
+}
+
 export interface SemanticProgram {
+    // Legacy map kept for compatibility with existing tests and callers.
     bindings: Map<string, ValueSet>
+    bindingStates: Map<string, SemanticBinding>
     diagnostics: SemanticDiagnostic[]
 }
 
 export function analyzeProgram(program: Program): SemanticProgram {
     const bindings = new Map<string, ValueSet>()
+    const bindingStates = new Map<string, SemanticBinding>()
     const diagnostics: SemanticDiagnostic[] = []
 
     for (const statement of program.statements) {
-        analyzeStatement(statement, bindings, diagnostics)
+        analyzeStatement(statement, bindings, bindingStates, diagnostics)
     }
 
-    return { bindings, diagnostics }
+    return { bindings, bindingStates, diagnostics }
 }
 
 function analyzeStatement(
     statement: Statement,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
     diagnostics: SemanticDiagnostic[],
 ) {
     switch (statement.kind) {
         case 'VariableDeclaration': {
-            const inferred = inferDeclarationValueSet(
+            const inferred = inferDeclarationBinding(
                 statement,
                 bindings,
                 diagnostics,
             )
             if (inferred) {
-                bindings.set(statement.identifier.name, inferred)
+                bindingStates.set(statement.identifier.name, inferred)
+                bindings.set(statement.identifier.name, inferred.current)
             }
             return
         }
@@ -65,7 +83,7 @@ function analyzeStatement(
             return
         }
         case 'IfStatement': {
-            analyzeIfStatement(statement, bindings, diagnostics)
+            analyzeIfStatement(statement, bindings, bindingStates, diagnostics)
             return
         }
     }
@@ -74,6 +92,7 @@ function analyzeStatement(
 function analyzeIfStatement(
     statement: IfStatement,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
     diagnostics: SemanticDiagnostic[],
 ) {
     const predicate = inferExpressionValueSet(
@@ -90,54 +109,82 @@ function analyzeIfStatement(
     }
 
     const thenBindings = new Map(bindings)
+    const thenBindingStates = new Map(bindingStates)
     for (const child of statement.thenStatements) {
-        analyzeStatement(child, thenBindings, diagnostics)
+        analyzeStatement(child, thenBindings, thenBindingStates, diagnostics)
     }
 
     const elseBindings = new Map(bindings)
+    const elseBindingStates = new Map(bindingStates)
     for (const child of statement.elseStatements) {
-        analyzeStatement(child, elseBindings, diagnostics)
+        analyzeStatement(child, elseBindings, elseBindingStates, diagnostics)
     }
 }
 
-function inferDeclarationValueSet(
+function inferDeclarationBinding(
     statement: VariableDeclaration,
     bindings: Map<string, ValueSet>,
     diagnostics: SemanticDiagnostic[],
-): ValueSet | null {
+): SemanticBinding | null {
     const initializer = inferExpressionValueSet(
         statement.initializer,
         bindings,
         diagnostics,
     )
 
+    if (!initializer) return null
+
+    let annotatedAllowed: ValueSet | null = null
+
     if (statement.typeAnnotation?.baseName === 'bitfield') {
-        const annotated = bitfieldSet(statement.typeAnnotation.length)
-        if (initializer) {
-            validateTypeAnnotationCompatibility(
-                annotated,
-                initializer,
-                statement.position,
-                diagnostics,
-            )
-        }
-        return annotated
+        annotatedAllowed = bitfieldSet(statement.typeAnnotation.length)
+        validateTypeAnnotationCompatibility(
+            annotatedAllowed,
+            initializer,
+            statement.position,
+            diagnostics,
+        )
     }
 
     if (statement.typeAnnotation?.baseName === 'tritfield') {
-        const annotated = tritfieldSet(statement.typeAnnotation.length)
-        if (initializer) {
-            validateTypeAnnotationCompatibility(
-                annotated,
-                initializer,
-                statement.position,
-                diagnostics,
-            )
-        }
-        return annotated
+        annotatedAllowed = tritfieldSet(statement.typeAnnotation.length)
+        validateTypeAnnotationCompatibility(
+            annotatedAllowed,
+            initializer,
+            statement.position,
+            diagnostics,
+        )
     }
 
-    return initializer
+    if (statement.semantics === 'ref') {
+        diagnostics.push({
+            position: statement.position,
+            message: `ref is only supported for shared structures (data/object/service), got ${describeValueSet(initializer)}`,
+        })
+        return null
+    }
+
+    if (statement.semantics === 'const') {
+        return {
+            semantics: statement.semantics,
+            current: initializer,
+            allowed: initializer,
+        }
+    }
+
+    const allowed = annotatedAllowed ?? topForValueSet(initializer)
+    if (!isSubsetValueSet(initializer, allowed)) {
+        diagnostics.push({
+            position: statement.position,
+            message: `initializer ${describeValueSet(initializer)} is not assignable to allowed set ${describeValueSet(allowed)}`,
+        })
+    }
+
+    return {
+        semantics: statement.semantics,
+        current: initializer,
+        allowed,
+    }
 }
 
 function inferExpressionValueSet(
@@ -499,17 +546,21 @@ function canonicalizeReal(value: string): string {
     return new Decimal(value).toString()
 }
 
-function stringSingleton(value: string): ValueSet {
-    return {
-        family: 'string',
-        form: 'singleton',
-        value,
-    }
-}
-
-function tritfieldSet(length?: number): ValueSet {
-    return {
-        family: 'tritfield',
-        length: length ?? null,
+function topForValueSet(valueSet: ValueSet): ValueSet {
+    switch (valueSet.family) {
+        case 'never':
+            return neverValueSet
+        case 'integer':
+            return integerTop()
+        case 'real':
+            return realTop()
+        case 'truthvalue':
+            return truthvalueTop()
+        case 'string':
+            return stringTop()
+        case 'bitfield':
+            return bitfieldSet()
+        case 'tritfield':
+            return tritfieldSet()
     }
 }

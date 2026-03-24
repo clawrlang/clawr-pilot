@@ -1,5 +1,6 @@
 export {
     analyzeProgram,
+    type SemanticBinding,
     type SemanticDiagnostic,
     type SemanticProgram,
 } from './analyze'

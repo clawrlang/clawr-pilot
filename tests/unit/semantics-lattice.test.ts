@@ -14,6 +14,7 @@ import {
     realRange,
     realSingleton,
     realTop,
+    stringTop,
     truthvalueSet,
     truthvalueTop,
 } from '../../src/semantics'
@@ -150,6 +151,88 @@ describe('semantic scaffold', () => {
         expect(semanticProgram.bindings.get('cmp')).toEqual(
             truthvalueSet('false', 'true'),
         )
+
+        const iBinding = semanticProgram.bindingStates.get('i')
+        expect(iBinding).toEqual({
+            semantics: 'const',
+            current: integerSingleton(42n),
+            allowed: integerSingleton(42n),
+        })
+    })
+
+    it('tracks current vs allowed sets for mut declarations', () => {
+        const program = parseClawr(
+            [
+                'mut i = 42',
+                'mut r = 3.14',
+                'mut t = ambiguous',
+                'mut s = "hello"',
+                'mut b: bitfield[4] = bitfield("1010")',
+                'mut q: tritfield[3] = tritfield("0?1")',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        expect(semanticProgram.bindings.get('i')).toEqual(integerSingleton(42n))
+        expect(semanticProgram.bindings.get('r')).toEqual(realSingleton('3.14'))
+
+        expect(semanticProgram.bindingStates.get('i')).toEqual({
+            semantics: 'mut',
+            current: integerSingleton(42n),
+            allowed: integerTop(),
+        })
+        expect(semanticProgram.bindingStates.get('r')).toEqual({
+            semantics: 'mut',
+            current: realSingleton('3.14'),
+            allowed: realTop(),
+        })
+        expect(semanticProgram.bindingStates.get('t')).toEqual({
+            semantics: 'mut',
+            current: truthvalueSet('ambiguous'),
+            allowed: truthvalueTop(),
+        })
+        expect(semanticProgram.bindingStates.get('s')).toEqual({
+            semantics: 'mut',
+            current: {
+                family: 'string',
+                form: 'singleton',
+                value: 'hello',
+            },
+            allowed: stringTop(),
+        })
+        expect(semanticProgram.bindingStates.get('b')).toEqual({
+            semantics: 'mut',
+            current: bitfieldSet(4),
+            allowed: bitfieldSet(4),
+        })
+        expect(semanticProgram.bindingStates.get('q')).toEqual({
+            semantics: 'mut',
+            current: {
+                family: 'tritfield',
+                length: 3,
+            },
+            allowed: {
+                family: 'tritfield',
+                length: 3,
+            },
+        })
+    })
+
+    it('rejects ref declarations for value families in this stage', () => {
+        const program = parseClawr('ref r = 3.14', 'test')
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'ref is only supported for shared structures (data/object/service), got real',
+        ])
+        expect(semanticProgram.bindingStates.has('r')).toBe(false)
+        expect(semanticProgram.bindings.has('r')).toBe(false)
     })
 
     it('reports family mismatch diagnostics for invalid expressions', () => {
