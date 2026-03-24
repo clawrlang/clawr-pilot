@@ -157,6 +157,11 @@ function lowerStatement(
         return
     }
 
+    if (statement.kind === 'FunctionDeclaration') {
+        // Declarations are parsed but not lowered in this vertical slice.
+        return
+    }
+
     if (statement.kind === 'IfStatement') {
         lowerIfStatement(
             statement,

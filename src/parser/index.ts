@@ -8,6 +8,9 @@ import type {
     CallExpression,
     Expression,
     ExpressionStatement,
+    FunctionDeclaration,
+    FunctionParameter,
+    FunctionReturnSlot,
     IdentifierExpression,
     IfStatement,
     IntegerLiteralExpression,
@@ -71,6 +74,9 @@ export class Parser {
             return this.parseIfStatement()
         }
 
+        const functionLike = this.tryParseFunctionLikeDeclaration()
+        if (functionLike) return functionLike
+
         if (
             token.kind === 'KEYWORD' &&
             (token.keyword === 'const' ||
@@ -81,6 +87,185 @@ export class Parser {
         }
 
         return this.parseExpressionStatement()
+    }
+
+    tryParseFunctionLikeDeclaration(): FunctionDeclaration | null {
+        const probe = this.stream.clone()
+        const first = probe.next({ skippingNewline: true })
+        if (!first || first.kind !== 'KEYWORD') return null
+
+        if (first.keyword === 'func') {
+            return this.parseFunctionLikeDeclaration(false)
+        }
+
+        if (first.keyword === 'mutating') {
+            const second = probe.next({ skippingNewline: true })
+            if (
+                second &&
+                second.kind === 'KEYWORD' &&
+                second.keyword === 'func'
+            ) {
+                return this.parseFunctionLikeDeclaration(true)
+            }
+        }
+
+        return null
+    }
+
+    parseFunctionLikeDeclaration(mutating: boolean): FunctionDeclaration {
+        const startToken = mutating
+            ? this.stream.expect('KEYWORD', 'mutating')
+            : this.stream.peek({ skippingNewline: true })
+
+        if (!startToken) {
+            throw new Error('Unexpected EOF while parsing function declaration')
+        }
+
+        this.stream.expect('KEYWORD', 'func')
+        const nameToken = this.stream.expect('IDENTIFIER')
+        const identifier: IdentifierExpression = {
+            kind: 'Identifier',
+            position: this.positionFromToken(nameToken),
+            name: nameToken.identifier,
+        }
+
+        const parameters = this.parseFunctionParameters()
+        const returnSlot = this.parseFunctionReturnSlot()
+        const body = this.parseBlockStatements()
+
+        const position = this.mergePositions(
+            this.positionFromToken(startToken),
+            body.endPosition,
+        )
+
+        return {
+            kind: 'FunctionDeclaration',
+            position,
+            mutating,
+            identifier,
+            parameters,
+            returnSlot,
+            body: body.statements,
+        }
+    }
+
+    parseFunctionParameters(): FunctionParameter[] {
+        this.stream.expect('PUNCTUATION', '(')
+        const parameters: FunctionParameter[] = []
+
+        let next = this.stream.peek({ skippingNewline: true })
+        if (!next) throw new Error('Unexpected EOF in parameter list')
+
+        while (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
+            const nameToken = this.stream.expect('IDENTIFIER')
+            let typeName: string | null = null
+
+            const maybeColon = this.stream.peek({ skippingNewline: true })
+            if (
+                maybeColon &&
+                maybeColon.kind === 'PUNCTUATION' &&
+                maybeColon.symbol === ':'
+            ) {
+                this.stream.next({ skippingNewline: true })
+                typeName = this.parseTypeNameInSignature()
+            }
+
+            const parameterEndToken = this.stream.peek({
+                skippingNewline: true,
+            })
+            parameters.push({
+                position: this.positionFromToken(
+                    parameterEndToken ?? nameToken,
+                ),
+                name: nameToken.identifier,
+                typeName,
+            })
+
+            next = this.stream.peek({ skippingNewline: true })
+            if (!next) throw new Error('Unexpected EOF in parameter list')
+            if (next.kind === 'PUNCTUATION' && next.symbol === ',') {
+                this.stream.next({ skippingNewline: true })
+                next = this.stream.peek({ skippingNewline: true })
+                if (!next) throw new Error('Unexpected EOF in parameter list')
+                continue
+            }
+            if (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
+                throw parseError(
+                    this.file,
+                    next,
+                    'Expected , or ) in parameter list',
+                )
+            }
+        }
+
+        this.stream.expect('PUNCTUATION', ')')
+        return parameters
+    }
+
+    parseFunctionReturnSlot(): FunctionReturnSlot {
+        const maybeArrow = this.stream.peek({ skippingNewline: true })
+        if (
+            !maybeArrow ||
+            maybeArrow.kind !== 'PUNCTUATION' ||
+            maybeArrow.symbol !== '->'
+        ) {
+            return {
+                position: null,
+                semantics: null,
+                typeName: null,
+            }
+        }
+
+        this.stream.next({ skippingNewline: true })
+
+        let semantics: FunctionReturnSlot['semantics'] = 'unique'
+        let token = this.stream.peek({ skippingNewline: true })
+        if (!token) throw new Error('Unexpected EOF after ->')
+
+        if (token.kind === 'KEYWORD' && token.keyword === 'const') {
+            this.stream.next({ skippingNewline: true })
+            semantics = 'const'
+            token = this.stream.peek({ skippingNewline: true })
+            if (!token) throw new Error('Unexpected EOF after -> const')
+        } else if (token.kind === 'KEYWORD' && token.keyword === 'ref') {
+            this.stream.next({ skippingNewline: true })
+            semantics = 'ref'
+            token = this.stream.peek({ skippingNewline: true })
+            if (!token) throw new Error('Unexpected EOF after -> ref')
+        }
+
+        const typeName = this.parseTypeNameInSignature()
+        const end = this.stream.peek({ skippingNewline: true })
+
+        return {
+            position: this.positionFromToken(end ?? token),
+            semantics,
+            typeName,
+        }
+    }
+
+    parseTypeNameInSignature(): string {
+        const token = this.stream.next({ skippingNewline: true })
+        if (!token) throw new Error('Unexpected EOF in type annotation')
+
+        if (token.kind === 'IDENTIFIER') {
+            return token.identifier
+        }
+
+        if (
+            token.kind === 'KEYWORD' &&
+            (token.keyword === 'data' ||
+                token.keyword === 'object' ||
+                token.keyword === 'service' ||
+                token.keyword === 'trait' ||
+                token.keyword === 'role' ||
+                token.keyword === 'union' ||
+                token.keyword === 'enum')
+        ) {
+            return token.keyword
+        }
+
+        throw parseError(this.file, token, 'Expected type name in signature')
     }
 
     tryParseSubsetDeclaration(): SubsetDeclaration | null {

@@ -60,6 +60,59 @@ describe('parser variable declaration semantics', () => {
     }
 })
 
+describe('parser function and method declarations', () => {
+    it('parses function declarations with parameters and return slots', () => {
+        const program = parseClawr(
+            [
+                'func sum(a: integer, b: integer) -> integer {',
+                '  const total = a + b',
+                '  print(total)',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'FunctionDeclaration',
+            mutating: false,
+            identifier: { name: 'sum' },
+            parameters: [
+                { name: 'a', typeName: 'integer' },
+                { name: 'b', typeName: 'integer' },
+            ],
+            returnSlot: {
+                semantics: 'unique',
+                typeName: 'integer',
+            },
+        })
+    })
+
+    it('parses mutating func declarations as function declarations with mutating flag', () => {
+        const program = parseClawr(
+            [
+                'mutating func roll(pins: integer) -> const integer {',
+                '  const result = pins',
+                '  print(result)',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'FunctionDeclaration',
+            mutating: true,
+            identifier: { name: 'roll' },
+            parameters: [{ name: 'pins', typeName: 'integer' }],
+            returnSlot: {
+                semantics: 'const',
+                typeName: 'integer',
+            },
+        })
+    })
+})
+
 describe('parser assignments', () => {
     it('parses identifier assignment statements', () => {
         const program = parseClawr('mut x = 1\nx = 2', 'test')

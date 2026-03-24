@@ -121,7 +121,30 @@ export type Statement =
     | VariableDeclaration
     | AssignmentStatement
     | ExpressionStatement
+    | FunctionDeclaration
     | IfStatement
+
+export interface FunctionParameter {
+    position: SourcePosition
+    name: string
+    typeName: string | null
+}
+
+export interface FunctionReturnSlot {
+    position: SourcePosition | null
+    semantics: 'unique' | 'const' | 'ref' | null
+    typeName: string | null
+}
+
+export interface FunctionDeclaration {
+    kind: 'FunctionDeclaration'
+    position: SourcePosition
+    mutating: boolean
+    identifier: IdentifierExpression
+    parameters: FunctionParameter[]
+    returnSlot: FunctionReturnSlot
+    body: Statement[]
+}
 
 export interface SubsetDeclaration {
     kind: 'SubsetDeclaration'

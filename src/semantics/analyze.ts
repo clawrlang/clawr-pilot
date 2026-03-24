@@ -113,6 +113,10 @@ function analyzeStatement(
             inferExpressionValueSet(statement.expression, bindings, diagnostics)
             return
         }
+        case 'FunctionDeclaration': {
+            // Function semantics are parsed but not analyzed in this vertical slice.
+            return
+        }
         case 'IfStatement': {
             analyzeIfStatement(
                 statement,
