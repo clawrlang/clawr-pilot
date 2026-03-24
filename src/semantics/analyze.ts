@@ -786,7 +786,14 @@ function allowedValueSetFromTypeAnnotation(
 
     switch (typeAnnotation.family) {
         case 'integer':
-            return integerTop()
+            return typeAnnotation.integerRange
+                ? integerRange({
+                      min: typeAnnotation.integerRange.min ?? undefined,
+                      max: typeAnnotation.integerRange.max ?? undefined,
+                      minInclusive: typeAnnotation.integerRange.minInclusive,
+                      maxInclusive: typeAnnotation.integerRange.maxInclusive,
+                  })
+                : integerTop()
         case 'real':
             return realTop()
         case 'string':

@@ -1,0 +1,11 @@
+{
+  // Purpose: make VS Code use a dedicated TS project for test files,
+  // so editor diagnostics match CLI typecheck expectations.
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true
+  },
+  "include": ["../src/**/*.ts", "./**/*.ts"],
+  "exclude": ["../node_modules"]
+}

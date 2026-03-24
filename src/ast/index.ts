@@ -23,6 +23,12 @@ export interface ValueSetTypeAnnotation {
     kind: 'subset'
     family: 'integer' | 'real' | 'truthvalue' | 'string'
     truthValues: Array<'false' | 'ambiguous' | 'true'> | null
+    integerRange: {
+        min: bigint | null
+        max: bigint | null
+        minInclusive: boolean
+        maxInclusive: boolean
+    } | null
 }
 
 export interface SubsetAliasTypeAnnotation {

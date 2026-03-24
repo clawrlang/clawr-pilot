@@ -119,7 +119,7 @@ export class Parser {
             )
         }
 
-        const constraint = this.parseSubsetConstraint(familyToken)
+        const constraint = this.parseSubsetConstraintAfterIn(familyToken)
 
         return {
             kind: 'SubsetDeclaration',
@@ -139,34 +139,21 @@ export class Parser {
         }
     }
 
-    parseSubsetConstraint(familyToken: Token & { kind: 'IDENTIFIER' }): {
+    parseSubsetConstraintAfterIn(familyToken: Token & { kind: 'IDENTIFIER' }): {
         constraint: SubsetConstraint
         position: SourcePosition
     } | null {
-        const maybeAt = this.stream.peek({ skippingNewline: true })
-        if (
-            !(
-                maybeAt &&
-                maybeAt.kind === 'PUNCTUATION' &&
-                maybeAt.symbol === '@'
-            )
-        ) {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!(next && next.kind === 'KEYWORD' && next.keyword === 'in')) {
             return null
         }
-
         this.stream.next({ skippingNewline: true })
-        const directive = this.stream.expect('IDENTIFIER')
 
-        if (directive.identifier === 'values') {
-            if (familyToken.identifier !== 'truthvalue') {
-                throw parseError(
-                    this.file,
-                    directive,
-                    '@values is currently only supported for truthvalue subsets',
-                )
-            }
-
-            const parsed = this.parseTruthvalueDirectiveValues()
+        if (familyToken.identifier === 'truthvalue') {
+            const parsed = this.parseTruthvalueSetConstraint(
+                familyToken,
+                'truthvalue constraints must list truth literals separated by commas',
+            )
             return {
                 constraint: {
                     kind: 'truthvalue-values',
@@ -176,69 +163,25 @@ export class Parser {
             }
         }
 
-        if (directive.identifier === 'except') {
-            if (familyToken.identifier !== 'truthvalue') {
-                throw parseError(
-                    this.file,
-                    directive,
-                    '@except is currently only supported for truthvalue subsets',
-                )
-            }
-
-            const parsed = this.parseTruthvalueDirectiveValues()
-            const excluded = new Set(parsed.values)
-            const allTruthValues: Array<'false' | 'ambiguous' | 'true'> = [
-                'false',
-                'ambiguous',
-                'true',
-            ]
-            const values = allTruthValues.filter(
-                (value) => !excluded.has(value),
-            )
-            if (values.length === 0) {
-                throw parseError(
-                    this.file,
-                    directive,
-                    '@except removed all truthvalue members; subset cannot be empty',
-                )
-            }
-            return {
-                constraint: {
-                    kind: 'truthvalue-values',
-                    values,
-                },
-                position: parsed.position,
-            }
-        }
-
-        if (directive.identifier === 'range') {
-            if (familyToken.identifier !== 'integer') {
-                throw parseError(
-                    this.file,
-                    directive,
-                    '@range is currently only supported for integer subsets',
-                )
-            }
-
-            const parsed = this.parseIntegerRangeDirective()
-            return {
-                constraint: parsed.constraint,
-                position: parsed.position,
-            }
+        if (familyToken.identifier === 'integer') {
+            return this.parseIntegerRangeConstraint()
         }
 
         throw parseError(
             this.file,
-            directive,
-            'Unsupported subset directive. Use @values(...), @except(...), or @range(...) in this vertical slice',
+            familyToken,
+            `${familyToken.identifier} constraints are not supported in this vertical slice`,
         )
     }
 
-    parseTruthvalueDirectiveValues(): {
+    parseTruthvalueSetConstraint(
+        contextToken: Token,
+        listError: string,
+    ): {
         values: Array<'false' | 'ambiguous' | 'true'>
         position: SourcePosition
     } {
-        this.stream.expect('PUNCTUATION', '(')
+        this.stream.expect('PUNCTUATION', '{')
 
         const values: Array<'false' | 'ambiguous' | 'true'> = []
         let closingToken: Token | null = null
@@ -246,14 +189,10 @@ export class Parser {
         while (true) {
             const token = this.stream.next({ skippingNewline: true })
             if (!token) {
-                throw new Error('Unexpected EOF in subset directive')
+                throw new Error('Unexpected EOF in truthvalue constraint')
             }
             if (token.kind !== 'TRUTH_LITERAL') {
-                throw parseError(
-                    this.file,
-                    token,
-                    'Expected truth literals in subset directive',
-                )
+                throw parseError(this.file, token, listError)
             }
             values.push(token.value)
 
@@ -262,14 +201,14 @@ export class Parser {
                 throw parseError(
                     this.file,
                     token,
-                    'Expected , or ) in subset directive',
+                    'Expected , or } in truthvalue constraint',
                 )
             }
             if (separator.kind === 'PUNCTUATION' && separator.symbol === ',') {
                 this.stream.next({ skippingNewline: true })
                 continue
             }
-            if (separator.kind === 'PUNCTUATION' && separator.symbol === ')') {
+            if (separator.kind === 'PUNCTUATION' && separator.symbol === '}') {
                 closingToken =
                     this.stream.next({ skippingNewline: true }) ?? null
                 break
@@ -277,12 +216,20 @@ export class Parser {
             throw parseError(
                 this.file,
                 separator,
-                'Expected , or ) in subset directive',
+                'Expected , or } in truthvalue constraint',
             )
         }
 
         if (!closingToken) {
             throw new Error('Unexpected parser state: missing closing token')
+        }
+
+        if (values.length === 0) {
+            throw parseError(
+                this.file,
+                contextToken,
+                'truthvalue constraints must include at least one literal',
+            )
         }
 
         return {
@@ -291,21 +238,21 @@ export class Parser {
         }
     }
 
-    parseIntegerRangeDirective(): {
-        constraint: SubsetConstraint
+    parseIntegerRangeConstraint(): {
+        constraint: Extract<SubsetConstraint, { kind: 'integer-range' }>
         position: SourcePosition
     } {
-        this.stream.expect('PUNCTUATION', '(')
+        this.stream.expect('PUNCTUATION', '[')
 
         const minToken = this.stream.next({ skippingNewline: true })
         if (!minToken) {
-            throw new Error('Unexpected EOF in @range directive')
+            throw new Error('Unexpected EOF in integer range constraint')
         }
         if (minToken.kind !== 'INTEGER_LITERAL') {
             throw parseError(
                 this.file,
                 minToken,
-                'Expected integer lower bound in @range(...)',
+                'Expected integer lower bound in range constraint',
             )
         }
         this.stream.expect('OPERATOR', ['...'])
@@ -317,7 +264,7 @@ export class Parser {
             this.stream.next({ skippingNewline: true })
         }
 
-        const close = this.stream.expect('PUNCTUATION', ')')
+        const close = this.stream.expect('PUNCTUATION', ']')
 
         return {
             constraint: {
@@ -499,23 +446,74 @@ export class Parser {
         if (
             typeToken.identifier === 'integer' ||
             typeToken.identifier === 'real' ||
-            typeToken.identifier === 'string'
+            typeToken.identifier === 'string' ||
+            typeToken.identifier === 'truthvalue'
         ) {
-            return {
-                kind: 'subset',
-                family: typeToken.identifier,
-                truthValues: null,
-            }
-        }
-
-        if (typeToken.identifier === 'truthvalue') {
-            return this.parseTruthvalueTypeAnnotation(typeToken)
+            return this.parseValueSetTypeAnnotation(typeToken)
         }
 
         return {
             kind: 'subset-alias',
             name: typeToken.identifier,
         }
+    }
+
+    parseValueSetTypeAnnotation(
+        typeToken: Token & { kind: 'IDENTIFIER' },
+    ): TypeAnnotation {
+        const family = typeToken.identifier
+        if (
+            family !== 'integer' &&
+            family !== 'real' &&
+            family !== 'string' &&
+            family !== 'truthvalue'
+        ) {
+            throw parseError(
+                this.file,
+                typeToken,
+                'Invalid value-set type annotation',
+            )
+        }
+
+        const annotation: TypeAnnotation = {
+            kind: 'subset',
+            family,
+            truthValues: null,
+            integerRange: null,
+        }
+
+        const maybeIn = this.stream.peek({ skippingNewline: true })
+        if (
+            !(maybeIn && maybeIn.kind === 'KEYWORD' && maybeIn.keyword === 'in')
+        ) {
+            return annotation
+        }
+        this.stream.next({ skippingNewline: true })
+
+        if (family === 'truthvalue') {
+            const parsed = this.parseTruthvalueSetConstraint(
+                typeToken,
+                'truthvalue constraints must list truth literals separated by commas',
+            )
+            return {
+                ...annotation,
+                truthValues: parsed.values,
+            }
+        }
+
+        if (family === 'integer') {
+            const parsed = this.parseIntegerRangeConstraint()
+            return {
+                ...annotation,
+                integerRange: parsed.constraint,
+            }
+        }
+
+        throw parseError(
+            this.file,
+            typeToken,
+            `${family} constraints are not supported in this vertical slice`,
+        )
     }
 
     parseFieldTypeAnnotation(
@@ -555,61 +553,6 @@ export class Parser {
             kind: 'field',
             baseName: typeToken.identifier,
             length: Number(lengthToken.value),
-        }
-    }
-
-    parseTruthvalueTypeAnnotation(
-        typeToken: Token & { kind: 'IDENTIFIER' },
-    ): TypeAnnotation {
-        const next = this.stream.peek({ skippingNewline: true })
-        if (!(next && next.kind === 'PUNCTUATION' && next.symbol === '[')) {
-            return {
-                kind: 'subset',
-                family: 'truthvalue',
-                truthValues: null,
-            }
-        }
-
-        this.stream.next({ skippingNewline: true })
-
-        const values: Array<'false' | 'ambiguous' | 'true'> = []
-        while (true) {
-            const token = this.stream.next({ skippingNewline: true })
-            if (!token || token.kind !== 'TRUTH_LITERAL') {
-                throw parseError(
-                    this.file,
-                    token ?? typeToken,
-                    'truthvalue[...] annotations must list truth literals separated by |',
-                )
-            }
-            values.push(token.value)
-
-            const separator = this.stream.peek({ skippingNewline: true })
-            if (
-                separator &&
-                separator.kind === 'OPERATOR' &&
-                separator.operator === '|'
-            ) {
-                this.stream.next({ skippingNewline: true })
-                continue
-            }
-            break
-        }
-
-        this.stream.expect('PUNCTUATION', ']')
-
-        if (values.length === 0) {
-            throw parseError(
-                this.file,
-                typeToken,
-                'truthvalue[...] annotations must include at least one literal',
-            )
-        }
-
-        return {
-            kind: 'subset',
-            family: 'truthvalue',
-            truthValues: [...new Set(values)],
         }
     }
 

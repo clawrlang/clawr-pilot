@@ -73,9 +73,9 @@ describe('parser assignments', () => {
 })
 
 describe('parser subset declarations', () => {
-    it('parses truthvalue subset declarations with @except', () => {
+    it('parses truthvalue subset declarations with in-set syntax', () => {
         const program = parseClawr(
-            'subset boolean = truthvalue @except(ambiguous)',
+            'subset boolean = truthvalue in {false, true}',
             'test',
         )
 
@@ -90,11 +90,8 @@ describe('parser subset declarations', () => {
         })
     })
 
-    it('parses integer subset declarations with @range', () => {
-        const program = parseClawr(
-            'subset natural = integer @range(0...)',
-            'test',
-        )
+    it('parses integer subset declarations with in-range syntax', () => {
+        const program = parseClawr('subset natural = integer in [0...]', 'test')
 
         expect(program.statements[0]).toMatchObject({
             kind: 'SubsetDeclaration',
@@ -143,7 +140,7 @@ describe('parser field type annotations', () => {
                 'mut i: integer = 1',
                 'mut r: real = 3.14',
                 'mut s: string = "x"',
-                'mut t: truthvalue[false|true] = true',
+                'mut t: truthvalue in {false, true} = true',
             ].join('\n'),
             'test',
         )
@@ -154,6 +151,7 @@ describe('parser field type annotations', () => {
                 kind: 'subset',
                 family: 'integer',
                 truthValues: null,
+                integerRange: null,
             },
         })
         expect(program.statements[3]).toMatchObject({
@@ -162,16 +160,16 @@ describe('parser field type annotations', () => {
                 kind: 'subset',
                 family: 'truthvalue',
                 truthValues: ['false', 'true'],
+                integerRange: null,
             },
         })
     })
 
     it('parses named subset aliases in type annotations', () => {
         const program = parseClawr(
-            [
-                'subset natural = integer @range(0...)',
-                'mut n: natural = 1',
-            ].join('\n'),
+            ['subset natural = integer in [0...]', 'mut n: natural = 1'].join(
+                '\n',
+            ),
             'test',
         )
 
@@ -186,9 +184,9 @@ describe('parser field type annotations', () => {
 
     it('rejects invalid truthvalue subset members', () => {
         expect(() =>
-            parseClawr('const x: truthvalue[0] = true', 'test'),
+            parseClawr('const x: truthvalue in {0} = true', 'test'),
         ).toThrow(
-            /truthvalue\[\.\.\.\] annotations must list truth literals separated by \|/,
+            /truthvalue constraints must list truth literals separated by commas/,
         )
     })
 

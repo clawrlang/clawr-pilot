@@ -4,8 +4,6 @@
   - length and regex matches for `string`
   - Runtime: use simple C types when range and precision allow
   - Static code-path analysis and narrowing by control flow/path conditions
-  - `subset boolean = truthvalue @except(ambiguous)` or `subset boolean = truthvalue @values(false, true)`
-  - `subset natural = integer @range(0...)`
 - `data`, `object` and `service` types
   - Heap allocated and reference counted
   - `data` is a naked data structure — no methods

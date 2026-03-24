@@ -239,7 +239,7 @@ describe('semantic scaffold', () => {
         const okProgram = parseClawr(
             [
                 'mut i: integer = 42',
-                'mut t: truthvalue[false|true] = false',
+                'mut t: truthvalue in {false, true} = false',
             ].join('\n'),
             'test',
         )
@@ -257,22 +257,22 @@ describe('semantic scaffold', () => {
         })
 
         const badProgram = parseClawr(
-            'mut t: truthvalue[false|true] = ambiguous',
+            'mut t: truthvalue in {false, true} = ambiguous',
             'test',
         )
         const bad = analyzeProgram(badProgram)
-        expect(bad.diagnostics.map((diagnostic) => diagnostic.message)).toEqual(
-            [
-                'type annotation truthvalue[false|true] is incompatible with initializer truthvalue[ambiguous]',
-            ],
-        )
+        expect(
+            bad.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'type annotation truthvalue[false|true] is incompatible with initializer truthvalue[ambiguous]',
+        ])
     })
 
-    it('supports subset aliases declared with directives', () => {
+    it('supports subset aliases declared with in-constraints', () => {
         const program = parseClawr(
             [
-                'subset boolean = truthvalue @except(ambiguous)',
-                'subset natural = integer @range(0...)',
+                'subset boolean = truthvalue in {false, true}',
+                'subset natural = integer in [0...]',
                 'mut b: boolean = true',
                 'mut n: natural = 42',
                 'n = -1',
@@ -322,9 +322,10 @@ describe('semantic scaffold', () => {
 
     it('rejects assignment outside allowed subset', () => {
         const program = parseClawr(
-            ['mut t: truthvalue[false|true] = false', 't = ambiguous'].join(
-                '\n',
-            ),
+            [
+                'mut t: truthvalue in {false, true} = false',
+                't = ambiguous',
+            ].join('\n'),
             'test',
         )
 
@@ -366,9 +367,7 @@ describe('semantic scaffold', () => {
         ])
 
         expect(
-            semanticProgram.diagnostics.map(
-                (diagnostic) => diagnostic.position,
-            ),
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.position),
         ).toEqual([
             { file: 'test', line: 3, column: 18, endLine: 3, endColumn: 19 },
             { file: 'test', line: 4, column: 20, endLine: 4, endColumn: 28 },
