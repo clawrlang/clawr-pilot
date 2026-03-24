@@ -6,12 +6,14 @@ import {
     equalValueSets,
     integerRange,
     integerSingleton,
+    integerTop,
     isSubsetValueSet,
     joinValueSets,
     meetValueSets,
     neverValueSet,
     realRange,
     realSingleton,
+    realTop,
     truthvalueSet,
     truthvalueTop,
 } from '../../src/semantics'
@@ -96,5 +98,55 @@ describe('semantic scaffold', () => {
             family: 'tritfield',
             length: 3,
         })
+    })
+
+    it('infers identifier and operator expressions from existing bindings', () => {
+        const program = parseClawr(
+            [
+                'const i = 42',
+                'const iAlias = i',
+                'const iNeg = -i',
+                'const iArith = i + iAlias',
+                'const r = 2.5e+3',
+                'const rNeg = -r',
+                'const rArith = r / rNeg',
+                'const t = ambiguous',
+                'const notT = !t',
+                'const andT = t && true',
+                'const b = bitfield("1010")',
+                'const bFlip = ~b',
+                'const cmp = i < iNeg',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindings.get('iAlias')).toEqual(
+            integerSingleton(42n),
+        )
+        expect(semanticProgram.bindings.get('iNeg')).toEqual(
+            integerSingleton(-42n),
+        )
+        expect(semanticProgram.bindings.get('iArith')).toEqual(integerTop())
+
+        expect(semanticProgram.bindings.get('rNeg')).toEqual(
+            realSingleton('-2500'),
+        )
+        expect(semanticProgram.bindings.get('rArith')).toEqual(realTop())
+
+        expect(semanticProgram.bindings.get('notT')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
+        expect(semanticProgram.bindings.get('andT')).toEqual(
+            truthvalueSet('ambiguous'),
+        )
+
+        expect(semanticProgram.bindings.get('b')).toEqual(bitfieldSet(4))
+        expect(semanticProgram.bindings.get('bFlip')).toEqual(bitfieldSet(4))
+
+        expect(semanticProgram.bindings.get('cmp')).toEqual(
+            truthvalueSet('false', 'true'),
+        )
     })
 })
