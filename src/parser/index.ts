@@ -79,9 +79,11 @@ export class Parser {
         this.stream.expect('PUNCTUATION', '(')
         const predicate = this.parseExpression()
         this.stream.expect('PUNCTUATION', ')')
-        const thenStatements = this.parseBlockStatements()
+        const thenBlock = this.parseBlockStatements()
+        const thenStatements = thenBlock.statements
 
         let elseStatements: Statement[] = []
+        let endPosition = thenBlock.endPosition
         const next = this.stream.peek({ skippingNewline: true })
         if (next && next.kind === 'KEYWORD' && next.keyword === 'else') {
             this.stream.next({ skippingNewline: true })
@@ -93,21 +95,30 @@ export class Parser {
             ) {
                 // else-if is parsed as syntactic sugar: else { if (...) { ... } }
                 elseStatements = [this.parseIfStatement()]
+                endPosition = elseStatements[0].position
             } else {
-                elseStatements = this.parseBlockStatements()
+                const elseBlock = this.parseBlockStatements()
+                elseStatements = elseBlock.statements
+                endPosition = elseBlock.endPosition
             }
         }
 
         return {
             kind: 'IfStatement',
-            position: this.positionFromToken(ifToken),
+            position: this.mergePositions(
+                this.positionFromToken(ifToken),
+                endPosition,
+            ),
             predicate,
             thenStatements,
             elseStatements,
         }
     }
 
-    parseBlockStatements(): Statement[] {
+    parseBlockStatements(): {
+        statements: Statement[]
+        endPosition: SourcePosition
+    } {
         this.stream.expect('PUNCTUATION', '{')
         const statements: Statement[] = []
 
@@ -116,8 +127,13 @@ export class Parser {
             const next = this.stream.peek({ skippingNewline: true })
             if (!next) throw new Error('Unexpected EOF in block statement')
             if (next.kind === 'PUNCTUATION' && next.symbol === '}') {
-                this.stream.next({ skippingNewline: true })
-                return statements
+                const closeToken = this.stream.next({ skippingNewline: true })
+                if (!closeToken)
+                    throw new Error('Unexpected EOF in block statement')
+                return {
+                    statements,
+                    endPosition: this.positionFromToken(closeToken),
+                }
             }
 
             const statement = this.parseStatement()
@@ -168,7 +184,10 @@ export class Parser {
 
         return {
             kind: 'VariableDeclaration',
-            position: this.positionFromToken(token),
+            position: this.mergePositions(
+                this.positionFromToken(token),
+                initializer.position,
+            ),
             semantics,
             identifier: {
                 kind: 'Identifier',
@@ -241,7 +260,10 @@ export class Parser {
                 const right = this.parseLogicalAndExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: '||',
                     left: expr,
                     right,
@@ -263,7 +285,10 @@ export class Parser {
                 const right = this.parseComparisonExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: '&&',
                     left: expr,
                     right,
@@ -285,7 +310,10 @@ export class Parser {
                 const right = this.parseExponentiationExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: '|',
                     left: expr,
                     right,
@@ -307,7 +335,10 @@ export class Parser {
                 const right = this.parseUnaryExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: '&',
                     left: expr,
                     right,
@@ -338,7 +369,10 @@ export class Parser {
                 const right = this.parseAdditiveExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: token.operator,
                     left: expr,
                     right,
@@ -364,7 +398,10 @@ export class Parser {
                 const right = this.parseMultiplicativeExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: token.operator,
                     left: expr,
                     right,
@@ -390,7 +427,10 @@ export class Parser {
                 const right = this.parseBitwiseOrExpression()
                 expr = {
                     kind: 'BinaryExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        right.position,
+                    ),
                     operator: token.operator,
                     left: expr,
                     right,
@@ -412,7 +452,7 @@ export class Parser {
             const exponent = this.parseExponentiationExpression()
             return {
                 kind: 'BinaryExpression',
-                position: base.position,
+                position: this.mergePositions(base.position, exponent.position),
                 operator: '^',
                 left: base,
                 right: exponent,
@@ -428,21 +468,29 @@ export class Parser {
 
         if (token.kind === 'OPERATOR' && token.operator === '!') {
             this.stream.next({ skippingNewline: true })
+            const operand = this.parseUnaryExpression()
             return {
                 kind: 'UnaryExpression',
-                position: this.positionFromToken(token),
+                position: this.mergePositions(
+                    this.positionFromToken(token),
+                    operand.position,
+                ),
                 operator: '!',
-                operand: this.parseUnaryExpression(),
+                operand,
             } satisfies UnaryExpression
         }
 
         if (token.kind === 'OPERATOR' && token.operator === '~') {
             this.stream.next({ skippingNewline: true })
+            const operand = this.parseUnaryExpression()
             return {
                 kind: 'UnaryExpression',
-                position: this.positionFromToken(token),
+                position: this.mergePositions(
+                    this.positionFromToken(token),
+                    operand.position,
+                ),
                 operator: '~',
-                operand: this.parseUnaryExpression(),
+                operand,
             } satisfies UnaryExpression
         }
 
@@ -466,7 +514,10 @@ export class Parser {
                 const prop = this.stream.expect('IDENTIFIER')
                 expr = {
                     kind: 'MemberExpression',
-                    position: expr.position,
+                    position: this.mergePositions(
+                        expr.position,
+                        this.positionFromToken(prop),
+                    ),
                     object: expr,
                     property: prop.identifier,
                 } satisfies MemberExpression
@@ -545,7 +596,10 @@ export class Parser {
         if (operand.kind === 'IntegerLiteral') {
             return {
                 kind: 'IntegerLiteral',
-                position: this.positionFromToken(operator),
+                position: this.mergePositions(
+                    this.positionFromToken(operator),
+                    operand.position,
+                ),
                 value: -operand.value,
             } satisfies IntegerLiteralExpression
         }
@@ -553,7 +607,10 @@ export class Parser {
         if (operand.kind === 'RealLiteral') {
             return {
                 kind: 'RealLiteral',
-                position: this.positionFromToken(operator),
+                position: this.mergePositions(
+                    this.positionFromToken(operator),
+                    operand.position,
+                ),
                 value: operand.value.startsWith('-')
                     ? operand.value.slice(1)
                     : `-${operand.value}`,
@@ -562,7 +619,10 @@ export class Parser {
 
         return {
             kind: 'UnaryExpression',
-            position: this.positionFromToken(operator),
+            position: this.mergePositions(
+                this.positionFromToken(operator),
+                operand.position,
+            ),
             operator: '-',
             operand,
         } satisfies UnaryExpression
@@ -596,21 +656,66 @@ export class Parser {
             }
         }
 
-        this.stream.expect('PUNCTUATION', ')')
+        const closeToken = this.stream.expect('PUNCTUATION', ')')
 
         return {
             kind: 'CallExpression',
-            position: callee.position,
+            position: this.mergePositions(
+                callee.position,
+                this.positionFromToken(closeToken),
+            ),
             callee,
             arguments: args,
         }
     }
 
     positionFromToken(token: Token): SourcePosition {
+        const width = this.tokenWidth(token)
         return {
             file: this.file,
             line: token.line,
             column: token.column,
+            endLine: token.line,
+            endColumn: token.column + Math.max(0, width - 1),
+        }
+    }
+
+    mergePositions(start: SourcePosition, end: SourcePosition): SourcePosition {
+        return {
+            file: start.file,
+            line: start.line,
+            column: start.column,
+            endLine: end.endLine,
+            endColumn: end.endColumn,
+        }
+    }
+
+    tokenWidth(token: Token): number {
+        switch (token.kind) {
+            case 'NEWLINE':
+                return 1
+            case 'KEYWORD':
+                return token.keyword.length
+            case 'IDENTIFIER':
+                return token.identifier.length
+            case 'REAL_LITERAL':
+                return token.source.length
+            case 'INTEGER_LITERAL':
+                return token.value.toString().length
+            case 'TRUTH_LITERAL':
+                return token.value.length
+            case 'STRING_LITERAL':
+                return token.value.length + 2
+            case 'REGEX_LITERAL': {
+                const modifiers = token.modifiers
+                    ? [...token.modifiers].sort().join('').length
+                    : 0
+                return token.pattern.length + 2 + modifiers
+            }
+            case 'PUNCTUATION':
+                return token.symbol.length
+            case 'OPERATOR':
+                return token.operator.length
         }
     }
 

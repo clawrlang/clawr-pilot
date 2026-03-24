@@ -32,6 +32,8 @@ const truthAliasPosition = {
     file: '<codegen>',
     line: 0,
     column: 0,
+    endLine: 0,
+    endColumn: 0,
 } as const
 
 const TRUTH_CALLABLES: CallableRegistry<TruthBaseName> = {

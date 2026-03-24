@@ -38,7 +38,7 @@ async function buildCommand(sourceFile: string, outDir: string) {
         const message = semanticProgram.diagnostics
             .map(
                 (diagnostic) =>
-                    `${diagnostic.position.file}:${diagnostic.position.line}:${diagnostic.position.column}:semantic: ${diagnostic.message}`,
+                    `${diagnostic.position.file}:${diagnostic.position.line}:${diagnostic.position.column}-${diagnostic.position.endLine}:${diagnostic.position.endColumn}:semantic: ${diagnostic.message}`,
             )
             .join('\n')
         throw new Error(message)

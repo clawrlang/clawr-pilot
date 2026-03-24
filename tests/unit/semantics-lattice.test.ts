@@ -185,12 +185,18 @@ describe('semantic scaffold', () => {
                 (diagnostic) => diagnostic.position,
             ),
         ).toEqual([
-            { file: 'test', line: 3, column: 18 },
-            { file: 'test', line: 4, column: 20 },
-            { file: 'test', line: 5, column: 16 },
-            { file: 'test', line: 6, column: 16 },
-            { file: 'test', line: 7, column: 5 },
-            { file: 'test', line: 8, column: 20 },
+            { file: 'test', line: 3, column: 18, endLine: 3, endColumn: 19 },
+            { file: 'test', line: 4, column: 20, endLine: 4, endColumn: 28 },
+            { file: 'test', line: 5, column: 16, endLine: 5, endColumn: 20 },
+            { file: 'test', line: 6, column: 16, endLine: 6, endColumn: 20 },
+            { file: 'test', line: 7, column: 5, endLine: 7, endColumn: 5 },
+            {
+                file: 'test',
+                line: 8,
+                column: 20,
+                endLine: 8,
+                endColumn: 30,
+            },
         ])
     })
 })

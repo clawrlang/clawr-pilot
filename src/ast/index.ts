@@ -7,6 +7,8 @@ export interface SourcePosition {
     file: string
     line: number
     column: number
+    endLine: number
+    endColumn: number
 }
 
 export type VariableSemantics = 'const' | 'mut' | 'ref'
