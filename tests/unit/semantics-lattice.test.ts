@@ -621,3 +621,83 @@ describe('truthvalue callable narrowing', () => {
         expect(result.bindings.get('x')).toEqual(truthvalueSet('false'))
     })
 })
+
+describe('if/else branch-local narrowing', () => {
+    it('narrows identifier predicate inside then/else branches', () => {
+        const program = parseClawr(
+            [
+                'mut p = 1 < 2',
+                'if (p) {',
+                '  const mustBeTrue: truthvalue in {true} = p',
+                '} else {',
+                '  const mustBeFalse: truthvalue in {false, ambiguous} = p',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+
+    it('narrows negated predicate inside then/else branches', () => {
+        const program = parseClawr(
+            [
+                'mut p = 1 < 2',
+                'if (!p) {',
+                '  const mustBeFalse: truthvalue in {false} = p',
+                '} else {',
+                '  const mustBeTrueish: truthvalue in {ambiguous, true} = p',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+
+    it('joins branch assignment results conservatively after if/else', () => {
+        const program = parseClawr(
+            [
+                'mut p = 1 < 2',
+                'if (p) {',
+                '  p = true',
+                '} else {',
+                '  p = false',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.bindingStates.get('p')).toEqual({
+            semantics: 'mut',
+            current: truthvalueSet('false', 'true'),
+            allowed: truthvalueTop(),
+        })
+        expect(semanticProgram.bindings.get('p')).toEqual(
+            truthvalueSet('false', 'true'),
+        )
+    })
+
+    it('skips unreachable then-branch for known false predicate', () => {
+        const program = parseClawr(
+            ['const p = false', 'if (p) { const x = 1 } else { const y = 2 }'].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+
+    it('skips unreachable else-branch for known true predicate', () => {
+        const program = parseClawr(
+            ['const p = true', 'if (p) { const x = 1 } else { const y = 2 }'].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+})

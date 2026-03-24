@@ -296,27 +296,152 @@ function analyzeIfStatement(
 
     const thenBindings = new Map(bindings)
     const thenBindingStates = new Map(bindingStates)
-    for (const child of statement.thenStatements) {
-        analyzeStatement(
-            child,
+    const elseBindings = new Map(bindings)
+    const elseBindingStates = new Map(bindingStates)
+
+    let thenReachable = true
+    let elseReachable = true
+
+    // In this vertical slice, if(...) enters then only when predicate == true.
+    if (predicate && predicate.family === 'truthvalue') {
+        const thenConstraints = collectTruthBranchConstraints(
+            statement.predicate,
+            ['true'],
+        )
+        const elseConstraints = collectTruthBranchConstraints(
+            statement.predicate,
+            ['false', 'ambiguous'],
+        )
+
+        thenReachable = applyTruthBranchConstraints(
+            thenConstraints,
             thenBindings,
             thenBindingStates,
-            subsetAliases,
-            diagnostics,
+        )
+        elseReachable = applyTruthBranchConstraints(
+            elseConstraints,
+            elseBindings,
+            elseBindingStates,
         )
     }
 
-    const elseBindings = new Map(bindings)
-    const elseBindingStates = new Map(bindingStates)
-    for (const child of statement.elseStatements) {
-        analyzeStatement(
-            child,
-            elseBindings,
-            elseBindingStates,
-            subsetAliases,
-            diagnostics,
-        )
+    if (thenReachable) {
+        for (const child of statement.thenStatements) {
+            analyzeStatement(
+                child,
+                thenBindings,
+                thenBindingStates,
+                subsetAliases,
+                diagnostics,
+            )
+        }
     }
+
+    if (elseReachable) {
+        for (const child of statement.elseStatements) {
+            analyzeStatement(
+                child,
+                elseBindings,
+                elseBindingStates,
+                subsetAliases,
+                diagnostics,
+            )
+        }
+    }
+
+    // Merge branch-local updates back into the parent scope conservatively.
+    // Only pre-existing bindings are merged; declarations inside branches stay local.
+    for (const [name, original] of bindingStates.entries()) {
+        const thenState = thenBindingStates.get(name) ?? original
+        const elseState = elseBindingStates.get(name) ?? original
+
+        let mergedCurrent = original.current
+        if (thenReachable && elseReachable) {
+            mergedCurrent = joinValueSets(thenState.current, elseState.current)
+        } else if (thenReachable) {
+            mergedCurrent = thenState.current
+        } else if (elseReachable) {
+            mergedCurrent = elseState.current
+        }
+
+        const merged: SemanticBinding = {
+            semantics: original.semantics,
+            allowed: original.allowed,
+            current: mergedCurrent,
+        }
+        bindingStates.set(name, merged)
+        bindings.set(name, mergedCurrent)
+    }
+}
+
+function collectTruthBranchConstraints(
+    expression: Expression,
+    targetValues: TruthValueAtom[],
+): Map<string, ValueSet> {
+    const constraints = new Map<string, ValueSet>()
+
+    function addConstraint(name: string, next: ValueSet) {
+        const current = constraints.get(name)
+        constraints.set(name, current ? meetValueSets(current, next) : next)
+    }
+
+    function walk(node: Expression, target: TruthValueAtom[]) {
+        if (node.kind === 'Identifier') {
+            addConstraint(node.name, truthvalueSet(...target))
+            return
+        }
+
+        if (node.kind === 'UnaryExpression' && node.operator === '!') {
+            const invertedTarget = truthvalueSet(
+                ...target.map(invertTruthValue),
+            ).values
+            walk(node.operand, invertedTarget)
+            return
+        }
+
+        if (node.kind === 'BinaryExpression' && node.operator === '&&') {
+            // a && b can be true only if both operands are true.
+            if (target.length === 1 && target[0] === 'true') {
+                walk(node.left, ['true'])
+                walk(node.right, ['true'])
+            }
+            return
+        }
+
+        if (node.kind === 'BinaryExpression' && node.operator === '||') {
+            // a || b is non-true only if both operands are non-true.
+            if (!target.includes('true')) {
+                walk(node.left, ['false', 'ambiguous'])
+                walk(node.right, ['false', 'ambiguous'])
+            }
+        }
+    }
+
+    walk(expression, targetValues)
+    return constraints
+}
+
+function applyTruthBranchConstraints(
+    constraints: Map<string, ValueSet>,
+    bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+): boolean {
+    for (const [name, constraint] of constraints.entries()) {
+        const binding = bindingStates.get(name)
+        if (!binding || binding.current.family !== 'truthvalue') continue
+
+        const narrowed = meetValueSets(binding.current, constraint)
+        if (narrowed.family === 'never') return false
+
+        const updated: SemanticBinding = {
+            ...binding,
+            current: narrowed,
+        }
+        bindingStates.set(name, updated)
+        bindings.set(name, narrowed)
+    }
+
+    return true
 }
 
 function inferDeclarationBinding(
