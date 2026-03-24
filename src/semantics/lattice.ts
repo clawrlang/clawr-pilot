@@ -62,6 +62,16 @@ export type StringValueSet =
           pattern: string
           modifiers: string
       }
+    | {
+          family: 'string'
+          form: 'length-and-pattern'
+          min: bigint | null
+          max: bigint | null
+          minInclusive: boolean
+          maxInclusive: boolean
+          pattern: string
+          modifiers: string
+      }
 
 export interface BitfieldValueSet {
     family: 'bitfield'
@@ -234,6 +244,37 @@ export function stringPattern(
     }
 }
 
+export function stringLengthAndPattern(options: {
+    min?: bigint
+    max?: bigint
+    minInclusive?: boolean
+    maxInclusive?: boolean
+    pattern: string
+    modifiers?: string
+}): ValueSet {
+    const lengthPart = stringLengthRange({
+        min: options.min,
+        max: options.max,
+        minInclusive: options.minInclusive,
+        maxInclusive: options.maxInclusive,
+    })
+    if (lengthPart.family === 'never') return neverValueSet
+
+    const length = lengthPart as Extract<StringValueSet, { form: 'length' }>
+    return {
+        family: 'string',
+        form: 'length-and-pattern',
+        min: length.min,
+        max: length.max,
+        minInclusive: length.minInclusive,
+        maxInclusive: length.maxInclusive,
+        pattern: options.pattern,
+        modifiers: [...new Set((options.modifiers ?? '').split(''))]
+            .sort()
+            .join(''),
+    }
+}
+
 export function bitfieldSet(length?: number): BitfieldValueSet {
     return { family: 'bitfield', length: length ?? null }
 }
@@ -396,6 +437,19 @@ function equalStringValueSets(
             left.pattern === right.pattern && left.modifiers === right.modifiers
         )
     }
+    if (
+        left.form === 'length-and-pattern' &&
+        right.form === 'length-and-pattern'
+    ) {
+        return (
+            left.min === right.min &&
+            left.max === right.max &&
+            left.minInclusive === right.minInclusive &&
+            left.maxInclusive === right.maxInclusive &&
+            left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+        )
+    }
     return false
 }
 
@@ -420,6 +474,46 @@ function joinStringValueSets(
     }
     if (left.form === 'singleton' && right.form === 'pattern') {
         return matchesStringPattern(left.value, right) ? right : stringTop()
+    }
+
+    if (
+        left.form === 'length-and-pattern' &&
+        right.form === 'length-and-pattern'
+    ) {
+        if (
+            left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+        ) {
+            return stringLengthAndPattern({
+                min: undefinedIfNull(chooseIntegerLowerBound(left, right)),
+                minInclusive: chooseIntegerLowerInclusive(left, right),
+                max: undefinedIfNull(chooseIntegerUpperBound(left, right)),
+                maxInclusive: chooseIntegerUpperInclusive(left, right),
+                pattern: left.pattern,
+                modifiers: left.modifiers,
+            }) as StringValueSet
+        }
+        return stringTop()
+    }
+
+    if (left.form === 'length-and-pattern' && right.form === 'pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? right
+            : stringTop()
+    }
+    if (left.form === 'pattern' && right.form === 'length-and-pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? left
+            : stringTop()
+    }
+
+    if (left.form === 'length-and-pattern' && right.form === 'length') {
+        return isLengthRangeSubset(left, right) ? right : stringTop()
+    }
+    if (left.form === 'length' && right.form === 'length-and-pattern') {
+        return isLengthRangeSubset(right, left) ? left : stringTop()
     }
 
     const leftLength = asStringLengthRange(left)
@@ -470,6 +564,81 @@ function meetStringValueSets(
             left.modifiers === right.modifiers
             ? left
             : neverValueSet
+    }
+
+    if (left.form === 'length' && right.form === 'pattern') {
+        return stringLengthAndPattern({
+            min: undefinedIfNull(left.min),
+            max: undefinedIfNull(left.max),
+            minInclusive: left.minInclusive,
+            maxInclusive: left.maxInclusive,
+            pattern: right.pattern,
+            modifiers: right.modifiers,
+        })
+    }
+    if (left.form === 'pattern' && right.form === 'length') {
+        return stringLengthAndPattern({
+            min: undefinedIfNull(right.min),
+            max: undefinedIfNull(right.max),
+            minInclusive: right.minInclusive,
+            maxInclusive: right.maxInclusive,
+            pattern: left.pattern,
+            modifiers: left.modifiers,
+        })
+    }
+
+    if (left.form === 'length-and-pattern' && right.form === 'pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? left
+            : neverValueSet
+    }
+    if (left.form === 'pattern' && right.form === 'length-and-pattern') {
+        return left.pattern === right.pattern &&
+            left.modifiers === right.modifiers
+            ? right
+            : neverValueSet
+    }
+
+    if (left.form === 'length-and-pattern' && right.form === 'length') {
+        return stringLengthAndPattern({
+            min: undefinedIfNull(intersectIntegerLowerBound(left, right)),
+            minInclusive: intersectIntegerLowerInclusive(left, right),
+            max: undefinedIfNull(intersectIntegerUpperBound(left, right)),
+            maxInclusive: intersectIntegerUpperInclusive(left, right),
+            pattern: left.pattern,
+            modifiers: left.modifiers,
+        })
+    }
+    if (left.form === 'length' && right.form === 'length-and-pattern') {
+        return stringLengthAndPattern({
+            min: undefinedIfNull(intersectIntegerLowerBound(left, right)),
+            minInclusive: intersectIntegerLowerInclusive(left, right),
+            max: undefinedIfNull(intersectIntegerUpperBound(left, right)),
+            maxInclusive: intersectIntegerUpperInclusive(left, right),
+            pattern: right.pattern,
+            modifiers: right.modifiers,
+        })
+    }
+
+    if (
+        left.form === 'length-and-pattern' &&
+        right.form === 'length-and-pattern'
+    ) {
+        if (
+            left.pattern !== right.pattern ||
+            left.modifiers !== right.modifiers
+        ) {
+            return neverValueSet
+        }
+        return stringLengthAndPattern({
+            min: undefinedIfNull(intersectIntegerLowerBound(left, right)),
+            minInclusive: intersectIntegerLowerInclusive(left, right),
+            max: undefinedIfNull(intersectIntegerUpperBound(left, right)),
+            maxInclusive: intersectIntegerUpperInclusive(left, right),
+            pattern: left.pattern,
+            modifiers: left.modifiers,
+        })
     }
 
     if (left.form === 'length' && right.form === 'length') {
@@ -587,6 +756,9 @@ function asStringLengthRange(valueSet: StringValueSet): IntegerBounds | null {
     if (valueSet.form === 'length') {
         return valueSet
     }
+    if (valueSet.form === 'length-and-pattern') {
+        return valueSet
+    }
     return null
 }
 
@@ -596,6 +768,12 @@ function isStringSingletonInConstraint(
 ) {
     if (constraint.form === 'length') {
         return isLengthWithinBounds(BigInt(value.length), constraint)
+    }
+    if (constraint.form === 'length-and-pattern') {
+        return (
+            isLengthWithinBounds(BigInt(value.length), constraint) &&
+            matchesStringPattern(value, constraint)
+        )
     }
     return matchesStringPattern(value, constraint)
 }
@@ -614,10 +792,36 @@ function isLengthWithinBounds(length: bigint, bounds: IntegerBounds) {
 
 function matchesStringPattern(
     value: string,
-    patternValueSet: Extract<StringValueSet, { form: 'pattern' }>,
+    patternValueSet: Extract<
+        StringValueSet,
+        { form: 'pattern' | 'length-and-pattern' }
+    >,
 ) {
-    return new RegExp(patternValueSet.pattern, patternValueSet.modifiers).test(
-        value,
+    try {
+        return new RegExp(
+            patternValueSet.pattern,
+            patternValueSet.modifiers,
+        ).test(value)
+    } catch {
+        return false
+    }
+}
+
+function isLengthRangeSubset(candidate: IntegerBounds, target: IntegerBounds) {
+    const overlap = stringLengthRange({
+        min: undefinedIfNull(intersectIntegerLowerBound(candidate, target)),
+        minInclusive: intersectIntegerLowerInclusive(candidate, target),
+        max: undefinedIfNull(intersectIntegerUpperBound(candidate, target)),
+        maxInclusive: intersectIntegerUpperInclusive(candidate, target),
+    })
+
+    return (
+        overlap.family === 'string' &&
+        overlap.form === 'length' &&
+        overlap.min === candidate.min &&
+        overlap.max === candidate.max &&
+        overlap.minInclusive === candidate.minInclusive &&
+        overlap.maxInclusive === candidate.maxInclusive
     )
 }
 

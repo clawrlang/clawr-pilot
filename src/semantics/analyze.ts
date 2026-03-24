@@ -8,7 +8,9 @@ import type {
     Program,
     SourcePosition,
     Statement,
+    SubsetConstraint,
     SubsetDeclaration,
+    StringAtomicSubsetConstraint,
     TypeAnnotation,
     UnaryExpression,
     VariableDeclaration,
@@ -20,6 +22,7 @@ import {
     integerSingleton,
     integerTop,
     isSubsetValueSet,
+    joinValueSets,
     meetValueSets,
     neverValueSet,
     realRange,
@@ -179,29 +182,19 @@ function analyzeSubsetDeclaration(
             if (
                 statement.constraint &&
                 statement.constraint.kind !== 'string-length' &&
-                statement.constraint.kind !== 'string-pattern'
+                statement.constraint.kind !== 'string-pattern' &&
+                statement.constraint.kind !== 'string-composite'
             ) {
                 diagnostics.push({
                     position: statement.position,
                     message:
-                        'string subsets only support length ranges and regex constraints in this vertical slice',
+                        'string subsets only support length ranges, regex constraints, and one and/or composition in this vertical slice',
                 })
                 return
             }
-            valueSet =
-                statement.constraint?.kind === 'string-length'
-                    ? stringLengthRange({
-                          min: statement.constraint.min ?? undefined,
-                          max: statement.constraint.max ?? undefined,
-                          minInclusive: statement.constraint.minInclusive,
-                          maxInclusive: statement.constraint.maxInclusive,
-                      })
-                    : statement.constraint?.kind === 'string-pattern'
-                      ? stringPattern(
-                            statement.constraint.pattern,
-                            statement.constraint.modifiers,
-                        )
-                      : stringTop()
+            valueSet = statement.constraint
+                ? valueSetFromStringConstraint(statement.constraint)
+                : stringTop()
             break
         }
         case 'truthvalue': {
@@ -716,6 +709,9 @@ function describeValueSet(valueSet: ValueSet): string {
         if (valueSet.form === 'length') {
             return `string[length ${describeRangeBounds(valueSet)}]`
         }
+        if (valueSet.form === 'length-and-pattern') {
+            return `string[length ${describeRangeBounds(valueSet)} and /${valueSet.pattern}/${valueSet.modifiers}]`
+        }
         return `string[/${valueSet.pattern}/${valueSet.modifiers}]`
     }
     return 'unknown'
@@ -868,6 +864,12 @@ function allowedValueSetFromTypeAnnotation(
                   })
                 : realTop()
         case 'string':
+            if (typeAnnotation.stringComposite) {
+                return valueSetFromStringConstraint({
+                    kind: 'string-composite',
+                    ...typeAnnotation.stringComposite,
+                })
+            }
             if (typeAnnotation.stringLength) {
                 return stringLengthRange({
                     min: typeAnnotation.stringLength.min ?? undefined,
@@ -888,4 +890,42 @@ function allowedValueSetFromTypeAnnotation(
                 ? truthvalueSet(...typeAnnotation.truthValues)
                 : truthvalueTop()
     }
+}
+
+function valueSetFromStringConstraint(
+    constraint: Extract<
+        SubsetConstraint,
+        { kind: 'string-length' | 'string-pattern' | 'string-composite' }
+    >,
+): ValueSet {
+    if (constraint.kind === 'string-length') {
+        return stringLengthRange({
+            min: constraint.min ?? undefined,
+            max: constraint.max ?? undefined,
+            minInclusive: constraint.minInclusive,
+            maxInclusive: constraint.maxInclusive,
+        })
+    }
+    if (constraint.kind === 'string-pattern') {
+        return stringPattern(constraint.pattern, constraint.modifiers)
+    }
+
+    const left = valueSetFromStringAtomicConstraint(constraint.left)
+    const right = valueSetFromStringAtomicConstraint(constraint.right)
+    return constraint.operator === 'and'
+        ? meetValueSets(left, right)
+        : joinValueSets(left, right)
+}
+
+function valueSetFromStringAtomicConstraint(
+    constraint: StringAtomicSubsetConstraint,
+): ValueSet {
+    return constraint.kind === 'string-length'
+        ? stringLengthRange({
+              min: constraint.min ?? undefined,
+              max: constraint.max ?? undefined,
+              minInclusive: constraint.minInclusive,
+              maxInclusive: constraint.maxInclusive,
+          })
+        : stringPattern(constraint.pattern, constraint.modifiers)
 }

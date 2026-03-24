@@ -250,6 +250,41 @@ describe('parser subset declarations', () => {
             },
         })
     })
+
+    it('parses parenthesized single and/or string composite constraints', () => {
+        const program = parseClawr(
+            [
+                'subset shortSlug = string in ([1..8] and /^[a-z0-9-]+$/)',
+                'subset broad = string in ([1..8] or /^[a-z0-9-]+$/)',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'string-composite',
+                operator: 'and',
+                left: {
+                    kind: 'string-length',
+                    min: 1n,
+                    max: 8n,
+                },
+                right: {
+                    kind: 'string-pattern',
+                    pattern: '^[a-z0-9-]+$',
+                    modifiers: '',
+                },
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'SubsetDeclaration',
+            constraint: {
+                kind: 'string-composite',
+                operator: 'or',
+            },
+        })
+    })
 })
 
 describe('parser field type annotations', () => {
@@ -290,6 +325,7 @@ describe('parser field type annotations', () => {
                 'mut s: string = "x"',
                 'mut shortLabel: string in [1..8] = "tag"',
                 'mut slug: string in /^[a-z0-9-]+$/ = "hello-world"',
+                'mut shortSlug: string in ([1..8] and /^[a-z0-9-]+$/) = "slug1"',
                 'mut t: truthvalue in {false, true} = true',
             ].join('\n'),
             'test',
@@ -367,6 +403,17 @@ describe('parser field type annotations', () => {
             },
         })
         expect(program.statements[7]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'subset',
+                family: 'string',
+                stringComposite: {
+                    kind: 'string-composite',
+                    operator: 'and',
+                },
+            },
+        })
+        expect(program.statements[8]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
                 kind: 'subset',
@@ -456,6 +503,15 @@ describe('parser field type annotations', () => {
         expect(() => parseClawr('subset bad = string in true', 'test')).toThrow(
             /string constraints must be a length range like \[1\.\.8\] or a regex literal/,
         )
+        expect(() =>
+            parseClawr('subset bad = string in [1..8] and /x/', 'test'),
+        ).toThrow(/Use parentheses around composite string constraints/)
+        expect(() =>
+            parseClawr(
+                'subset bad = string in ([1..8] and /x/ and /y/)',
+                'test',
+            ),
+        ).toThrow(/currently allow only one and\/or operator/)
     })
 
     it('rejects out-of-range field lengths', () => {

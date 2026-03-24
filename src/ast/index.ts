@@ -45,6 +45,11 @@ export interface ValueSetTypeAnnotation {
         pattern: string
         modifiers: string
     } | null
+    stringComposite: {
+        operator: 'and' | 'or'
+        left: StringAtomicSubsetConstraint
+        right: StringAtomicSubsetConstraint
+    } | null
 }
 
 export interface SubsetAliasTypeAnnotation {
@@ -92,12 +97,24 @@ export interface StringPatternSubsetConstraint {
     modifiers: string
 }
 
+export type StringAtomicSubsetConstraint =
+    | StringLengthSubsetConstraint
+    | StringPatternSubsetConstraint
+
+export interface StringCompositeSubsetConstraint {
+    kind: 'string-composite'
+    operator: 'and' | 'or'
+    left: StringAtomicSubsetConstraint
+    right: StringAtomicSubsetConstraint
+}
+
 export type SubsetConstraint =
     | TruthValueSubsetConstraint
     | IntegerRangeSubsetConstraint
     | RealRangeSubsetConstraint
     | StringLengthSubsetConstraint
     | StringPatternSubsetConstraint
+    | StringCompositeSubsetConstraint
 
 export type Statement =
     | SubsetDeclaration

@@ -14,6 +14,7 @@ import {
     realRange,
     realSingleton,
     realTop,
+    stringLengthAndPattern,
     stringLengthRange,
     stringPattern,
     stringTop,
@@ -366,10 +367,16 @@ describe('semantic scaffold', () => {
             [
                 'subset shortText = string in [1..8]',
                 'subset slug = string in /^[a-z0-9-]+$/',
+                'subset shortSlug = string in ([1..8] and /^[a-z0-9-]+$/)',
+                'subset broad = string in ([1..8] or /^[a-z0-9-]+$/)',
                 'mut short: shortText = "tag"',
                 'mut s: slug = "hello-world"',
+                'mut both: shortSlug = "slug1"',
+                'mut either: broad = "hello-world"',
                 'short = "too long value"',
                 's = "Hello World"',
+                'both = "TOO-LONG VALUE"',
+                'either = "NO SPACES"',
             ].join('\n'),
             'test',
         )
@@ -394,11 +401,25 @@ describe('semantic scaffold', () => {
             },
             allowed: stringPattern('^[a-z0-9-]+$'),
         })
+        expect(semanticProgram.bindingStates.get('both')).toEqual({
+            semantics: 'mut',
+            current: {
+                family: 'string',
+                form: 'singleton',
+                value: 'slug1',
+            },
+            allowed: stringLengthAndPattern({
+                min: 1n,
+                max: 8n,
+                pattern: '^[a-z0-9-]+$',
+            }),
+        })
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
             'assigned value string["too long value"] is not assignable to allowed set string[length 1..8]',
             'assigned value string["Hello World"] is not assignable to allowed set string[/^[a-z0-9-]+$/]',
+            'assigned value string["TOO-LONG VALUE"] is not assignable to allowed set string[length 1..8 and /^[a-z0-9-]+$/]',
         ])
     })
 

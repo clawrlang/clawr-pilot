@@ -473,6 +473,39 @@ export class Parser {
         constraint:
             | Extract<SubsetConstraint, { kind: 'string-length' }>
             | Extract<SubsetConstraint, { kind: 'string-pattern' }>
+            | Extract<SubsetConstraint, { kind: 'string-composite' }>
+        position: SourcePosition
+    } {
+        const next = this.stream.peek({ skippingNewline: true })
+        if (!next) {
+            throw new Error('Unexpected EOF in string constraint')
+        }
+
+        if (next.kind === 'PUNCTUATION' && next.symbol === '(') {
+            return this.parseStringCompositeConstraint(contextToken)
+        }
+
+        const parsed = this.parseStringAtomicConstraint(contextToken)
+        const trailing = this.stream.peek({ skippingNewline: true })
+        if (
+            trailing &&
+            trailing.kind === 'KEYWORD' &&
+            (trailing.keyword === 'and' || trailing.keyword === 'or')
+        ) {
+            throw parseError(
+                this.file,
+                trailing,
+                'Use parentheses around composite string constraints, for example ([1..8] and /.../)',
+            )
+        }
+
+        return parsed
+    }
+
+    parseStringAtomicConstraint(contextToken: Token): {
+        constraint:
+            | Extract<SubsetConstraint, { kind: 'string-length' }>
+            | Extract<SubsetConstraint, { kind: 'string-pattern' }>
         position: SourcePosition
     } {
         const next = this.stream.peek({ skippingNewline: true })
@@ -506,6 +539,53 @@ export class Parser {
             contextToken,
             'string constraints must be a length range like [1..8] or a regex literal',
         )
+    }
+
+    parseStringCompositeConstraint(contextToken: Token): {
+        constraint: Extract<SubsetConstraint, { kind: 'string-composite' }>
+        position: SourcePosition
+    } {
+        this.stream.expect('PUNCTUATION', '(')
+        const left = this.parseStringAtomicConstraint(contextToken).constraint
+
+        const operatorToken = this.stream.next({ skippingNewline: true })
+        if (
+            !operatorToken ||
+            operatorToken.kind !== 'KEYWORD' ||
+            (operatorToken.keyword !== 'and' && operatorToken.keyword !== 'or')
+        ) {
+            throw parseError(
+                this.file,
+                operatorToken ?? contextToken,
+                "string composite constraints require exactly one operator: 'and' or 'or'",
+            )
+        }
+
+        const right = this.parseStringAtomicConstraint(operatorToken).constraint
+        const trailing = this.stream.peek({ skippingNewline: true })
+        if (
+            trailing &&
+            trailing.kind === 'KEYWORD' &&
+            (trailing.keyword === 'and' || trailing.keyword === 'or')
+        ) {
+            throw parseError(
+                this.file,
+                trailing,
+                'string composite constraints currently allow only one and/or operator',
+            )
+        }
+
+        const close = this.stream.expect('PUNCTUATION', ')')
+
+        return {
+            constraint: {
+                kind: 'string-composite',
+                operator: operatorToken.keyword,
+                left,
+                right,
+            },
+            position: this.positionFromToken(close),
+        }
     }
 
     parseStringLengthConstraint(): {
@@ -798,6 +878,7 @@ export class Parser {
             realRange: null,
             stringLength: null,
             stringPattern: null,
+            stringComposite: null,
         }
 
         const maybeIn = this.stream.peek({ skippingNewline: true })
@@ -837,15 +918,22 @@ export class Parser {
 
         if (family === 'string') {
             const parsed = this.parseStringConstraint(typeToken)
-            return parsed.constraint.kind === 'string-length'
-                ? {
-                      ...annotation,
-                      stringLength: parsed.constraint,
-                  }
-                : {
-                      ...annotation,
-                      stringPattern: parsed.constraint,
-                  }
+            if (parsed.constraint.kind === 'string-length') {
+                return {
+                    ...annotation,
+                    stringLength: parsed.constraint,
+                }
+            }
+            if (parsed.constraint.kind === 'string-pattern') {
+                return {
+                    ...annotation,
+                    stringPattern: parsed.constraint,
+                }
+            }
+            return {
+                ...annotation,
+                stringComposite: parsed.constraint,
+            }
         }
 
         throw parseError(

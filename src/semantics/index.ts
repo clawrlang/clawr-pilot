@@ -17,6 +17,7 @@ export {
     realRange,
     realSingleton,
     realTop,
+    stringLengthAndPattern,
     stringLengthRange,
     stringPattern,
     stringSingleton,
