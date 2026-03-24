@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js'
 import type {
+    AssignmentStatement,
     BinaryExpression,
     CallExpression,
     Expression,
@@ -79,6 +80,15 @@ function analyzeStatement(
             }
             return
         }
+        case 'AssignmentStatement': {
+            analyzeAssignmentStatement(
+                statement,
+                bindings,
+                bindingStates,
+                diagnostics,
+            )
+            return
+        }
         case 'ExpressionStatement': {
             inferExpressionValueSet(statement.expression, bindings, diagnostics)
             return
@@ -88,6 +98,52 @@ function analyzeStatement(
             return
         }
     }
+}
+
+function analyzeAssignmentStatement(
+    statement: AssignmentStatement,
+    bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    const binding = bindingStates.get(statement.target.name)
+    if (!binding) {
+        diagnostics.push({
+            position: statement.target.position,
+            message: `unknown identifier '${statement.target.name}'`,
+        })
+        return
+    }
+
+    if (binding.semantics === 'const') {
+        diagnostics.push({
+            position: statement.position,
+            message: `cannot assign to const variable '${statement.target.name}'`,
+        })
+        return
+    }
+
+    const assigned = inferExpressionValueSet(
+        statement.value,
+        bindings,
+        diagnostics,
+    )
+    if (!assigned) return
+
+    if (!isSubsetValueSet(assigned, binding.allowed)) {
+        diagnostics.push({
+            position: statement.position,
+            message: `assigned value ${describeValueSet(assigned)} is not assignable to allowed set ${describeValueSet(binding.allowed)}`,
+        })
+        return
+    }
+
+    const updated: SemanticBinding = {
+        ...binding,
+        current: assigned,
+    }
+    bindingStates.set(statement.target.name, updated)
+    bindings.set(statement.target.name, assigned)
 }
 
 function analyzeIfStatement(

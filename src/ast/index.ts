@@ -27,7 +27,11 @@ export interface ValueSetTypeAnnotation {
 
 export type TypeAnnotation = FieldTypeAnnotation | ValueSetTypeAnnotation
 
-export type Statement = VariableDeclaration | ExpressionStatement | IfStatement
+export type Statement =
+    | VariableDeclaration
+    | AssignmentStatement
+    | ExpressionStatement
+    | IfStatement
 
 export interface VariableDeclaration {
     kind: 'VariableDeclaration'
@@ -42,6 +46,13 @@ export interface ExpressionStatement {
     kind: 'ExpressionStatement'
     position: SourcePosition
     expression: Expression
+}
+
+export interface AssignmentStatement {
+    kind: 'AssignmentStatement'
+    position: SourcePosition
+    target: IdentifierExpression
+    value: Expression
 }
 
 export interface IfStatement {

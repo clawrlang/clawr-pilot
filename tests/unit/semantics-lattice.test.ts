@@ -268,6 +268,37 @@ describe('semantic scaffold', () => {
         )
     })
 
+    it('supports mut assignment and rejects const assignment', () => {
+        const program = parseClawr(
+            ['mut x = 1', 'x = 2', 'const y = 1', 'y = 2'].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.bindings.get('x')).toEqual(integerSingleton(2n))
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual(["cannot assign to const variable 'y'"])
+    })
+
+    it('rejects assignment outside allowed subset', () => {
+        const program = parseClawr(
+            ['mut t: truthvalue[false|true] = false', 't = ambiguous'].join(
+                '\n',
+            ),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'assigned value truthvalue[ambiguous] is not assignable to allowed set truthvalue[false|true]',
+        ])
+    })
+
     it('reports family mismatch diagnostics for invalid expressions', () => {
         const program = parseClawr(
             [

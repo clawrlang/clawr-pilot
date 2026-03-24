@@ -60,6 +60,18 @@ describe('parser variable declaration semantics', () => {
     }
 })
 
+describe('parser assignments', () => {
+    it('parses identifier assignment statements', () => {
+        const program = parseClawr('mut x = 1\nx = 2', 'test')
+
+        expect(program.statements[1]).toMatchObject({
+            kind: 'AssignmentStatement',
+            target: { kind: 'Identifier', name: 'x' },
+            value: { kind: 'IntegerLiteral', value: 2n },
+        })
+    })
+})
+
 describe('parser field type annotations', () => {
     it('parses bitfield and tritfield type annotations', () => {
         const program = parseClawr(

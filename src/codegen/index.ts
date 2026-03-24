@@ -1,4 +1,5 @@
 import type {
+    AssignmentStatement,
     CallExpression,
     Expression,
     ExpressionStatement,
@@ -177,6 +178,18 @@ function lowerStatement(
         return
     }
 
+    if (statement.kind === 'AssignmentStatement') {
+        lowerAssignmentStatement(
+            statement,
+            statements,
+            variableKinds,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
+
     lowerExpressionStatement(
         statement,
         statements,
@@ -185,6 +198,250 @@ function lowerStatement(
         bitfieldLengths,
         nextTemp,
     )
+}
+
+function lowerAssignmentStatement(
+    statement: AssignmentStatement,
+    statements: CStatement[],
+    variableKinds: Map<string, RuntimeType>,
+    tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
+    nextTemp: () => string,
+) {
+    const variableKind = variableKinds.get(statement.target.name)
+    if (!variableKind) {
+        throw new Error(
+            `Unknown variable in assignment: ${statement.target.name}`,
+        )
+    }
+
+    if (variableKind === 'truthvalue') {
+        if (!isTruthExpression(statement.value, variableKinds)) {
+            throw new Error(
+                'Assignment to truthvalue requires truthvalue expression',
+            )
+        }
+        const lowered = lowerTruthExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: { kind: 'CIdentifier', name: statement.target.name },
+            value: lowered.value,
+        })
+        return
+    }
+
+    if (variableKind === 'integer') {
+        if (!isIntegerExpression(statement.value, variableKinds)) {
+            throw new Error('Assignment to integer requires integer expression')
+        }
+        const lowered = lowerIntegerExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: statement.target.name }],
+            },
+        })
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: { kind: 'CIdentifier', name: statement.target.name },
+            value: lowered.value,
+        })
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        for (const temp of releaseTemps) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'releaseRC',
+                    args: [{ kind: 'CIdentifier', name: temp }],
+                },
+            })
+        }
+        return
+    }
+
+    if (variableKind === 'real') {
+        if (!isRealExpression(statement.value, variableKinds)) {
+            throw new Error('Assignment to real requires real expression')
+        }
+        const lowered = lowerRealExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: statement.target.name }],
+            },
+        })
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: { kind: 'CIdentifier', name: statement.target.name },
+            value: lowered.value,
+        })
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        for (const temp of releaseTemps) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'releaseRC',
+                    args: [{ kind: 'CIdentifier', name: temp }],
+                },
+            })
+        }
+        return
+    }
+
+    if (variableKind === 'string') {
+        if (statement.value.kind === 'StringLiteral') {
+            const temp = nextTemp()
+            statements.push({
+                kind: 'CVariableDeclaration',
+                type: 'String*',
+                name: temp,
+                initializer: {
+                    kind: 'CCallExpression',
+                    callee: 'String¸fromCString',
+                    args: [
+                        {
+                            kind: 'CStringLiteral',
+                            value: statement.value.value,
+                        },
+                    ],
+                },
+            })
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'releaseRC',
+                    args: [
+                        { kind: 'CIdentifier', name: statement.target.name },
+                    ],
+                },
+            })
+            statements.push({
+                kind: 'CAssignmentStatement',
+                target: { kind: 'CIdentifier', name: statement.target.name },
+                value: { kind: 'CIdentifier', name: temp },
+            })
+            return
+        }
+
+        if (
+            statement.value.kind === 'Identifier' &&
+            variableKinds.get(statement.value.name) === 'string'
+        ) {
+            if (statement.value.name !== statement.target.name) {
+                statements.push({
+                    kind: 'CExpressionStatement',
+                    expression: {
+                        kind: 'CCallExpression',
+                        callee: 'retainRC',
+                        args: [
+                            { kind: 'CIdentifier', name: statement.value.name },
+                        ],
+                    },
+                })
+                statements.push({
+                    kind: 'CExpressionStatement',
+                    expression: {
+                        kind: 'CCallExpression',
+                        callee: 'releaseRC',
+                        args: [
+                            {
+                                kind: 'CIdentifier',
+                                name: statement.target.name,
+                            },
+                        ],
+                    },
+                })
+                statements.push({
+                    kind: 'CAssignmentStatement',
+                    target: {
+                        kind: 'CIdentifier',
+                        name: statement.target.name,
+                    },
+                    value: { kind: 'CIdentifier', name: statement.value.name },
+                })
+            }
+            return
+        }
+
+        throw new Error(
+            'Assignment to string requires a string literal or string identifier',
+        )
+    }
+
+    if (variableKind === 'bitfield') {
+        if (!isBitfieldExpression(statement.value, variableKinds)) {
+            throw new Error(
+                'Assignment to bitfield requires bitfield expression',
+            )
+        }
+        const lowered = lowerBitfieldExpression(
+            statement.value,
+            variableKinds,
+            bitfieldLengths,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: { kind: 'CIdentifier', name: statement.target.name },
+            value: lowered.value,
+        })
+        return
+    }
+
+    if (variableKind === 'tritfield') {
+        if (!isTritfieldExpression(statement.value, variableKinds)) {
+            throw new Error(
+                'Assignment to tritfield requires tritfield expression',
+            )
+        }
+        const lowered = lowerTritfieldExpression(
+            statement.value,
+            variableKinds,
+            tritfieldLengths,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: {
+                kind: 'CIdentifier',
+                name: tritfieldPlaneName(statement.target.name, 0),
+            },
+            value: lowered.x0,
+        })
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: {
+                kind: 'CIdentifier',
+                name: tritfieldPlaneName(statement.target.name, 1),
+            },
+            value: lowered.x1,
+        })
+        return
+    }
 }
 
 function lowerIfStatement(

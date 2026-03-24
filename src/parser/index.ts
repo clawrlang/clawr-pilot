@@ -2,6 +2,7 @@ import { TokenStream } from '../lexer'
 import type { Token } from '../lexer'
 import { positionedError } from '../lexer/positioned-error'
 import type {
+    AssignmentStatement,
     BinaryExpression,
     CallArgument,
     CallExpression,
@@ -55,6 +56,9 @@ export class Parser {
     }
 
     parseStatement(): Statement {
+        const assignment = this.tryParseAssignmentStatement()
+        if (assignment) return assignment
+
         const token = this.stream.peek({ skippingNewline: true })
         if (!token) throw new Error('Unexpected EOF')
 
@@ -72,6 +76,37 @@ export class Parser {
         }
 
         return this.parseExpressionStatement()
+    }
+
+    tryParseAssignmentStatement(): AssignmentStatement | null {
+        const probe = this.stream.clone()
+        const maybeIdentifier = probe.next({ skippingNewline: true })
+        const maybeEquals = probe.peek({ skippingNewline: true })
+        if (
+            !maybeIdentifier ||
+            maybeIdentifier.kind !== 'IDENTIFIER' ||
+            !maybeEquals ||
+            maybeEquals.kind !== 'PUNCTUATION' ||
+            maybeEquals.symbol !== '='
+        ) {
+            return null
+        }
+
+        const identifier = this.stream.expect('IDENTIFIER')
+        const target: IdentifierExpression = {
+            kind: 'Identifier',
+            position: this.positionFromToken(identifier),
+            name: identifier.identifier,
+        }
+        this.stream.expect('PUNCTUATION', '=')
+        const value = this.parseExpression()
+
+        return {
+            kind: 'AssignmentStatement',
+            position: this.mergePositions(target.position, value.position),
+            target,
+            value,
+        }
     }
 
     parseIfStatement(): IfStatement {

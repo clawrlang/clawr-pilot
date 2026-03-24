@@ -213,6 +213,29 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('(2 ==')
     })
 
+    it('lowers assignment statements across runtime kinds', () => {
+        const source = [
+            'mut i = 1',
+            'i = 2',
+            'mut t = false',
+            't = true',
+            'mut r = 1.5',
+            'r = 2.0',
+            'mut b = bitfield("1010")',
+            'b = ~b',
+            'print(i.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-assignments.clawr'))
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('CAssignmentStatement')
+        expect(serialized).toContain('releaseRC')
+        expect(serialized).toContain('clawr_int_from_i64')
+        expect(serialized).toContain('Real¸fromString')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',
