@@ -127,6 +127,7 @@ export type Statement =
 export interface FunctionParameter {
     position: SourcePosition
     name: string
+    mode: 'in' | 'const' | 'mut' | 'ref'
     typeName: string | null
 }
 

@@ -186,6 +186,7 @@ export class Parser {
 
         while (!(next.kind === 'PUNCTUATION' && next.symbol === ')')) {
             const nameToken = this.stream.expect('IDENTIFIER')
+            let mode: FunctionParameter['mode'] = 'in'
             let typeName: string | null = null
 
             const maybeColon = this.stream.peek({ skippingNewline: true })
@@ -195,6 +196,24 @@ export class Parser {
                 maybeColon.symbol === ':'
             ) {
                 this.stream.next({ skippingNewline: true })
+                const maybeMode = this.stream.peek({ skippingNewline: true })
+                if (maybeMode && maybeMode.kind === 'KEYWORD') {
+                    if (
+                        maybeMode.keyword === 'in' ||
+                        maybeMode.keyword === 'const' ||
+                        maybeMode.keyword === 'mut' ||
+                        maybeMode.keyword === 'ref'
+                    ) {
+                        this.stream.next({ skippingNewline: true })
+                        mode = maybeMode.keyword
+                    } else {
+                        throw parseError(
+                            this.file,
+                            maybeMode,
+                            `Invalid parameter mode '${maybeMode.keyword}'. Use in, const, mut, or ref.`,
+                        )
+                    }
+                }
                 typeName = this.parseTypeNameInSignature()
             }
 
@@ -206,6 +225,7 @@ export class Parser {
                     parameterEndToken ?? nameToken,
                 ),
                 name: nameToken.identifier,
+                mode,
                 typeName,
             })
 
@@ -260,6 +280,12 @@ export class Parser {
             semantics = 'ref'
             token = this.stream.peek({ skippingNewline: true })
             if (!token) throw new Error('Unexpected EOF after -> ref')
+        } else if (token.kind === 'KEYWORD') {
+            throw parseError(
+                this.file,
+                token,
+                `Invalid return semantics modifier '${token.keyword}'. Use const, ref, or omit for unique return.`,
+            )
         }
 
         const typeName = this.parseTypeNameInSignature()
