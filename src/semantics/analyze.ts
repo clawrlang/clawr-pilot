@@ -4,6 +4,7 @@ import type {
     BinaryExpression,
     CallExpression,
     Expression,
+    FunctionDeclaration,
     IfStatement,
     Program,
     SourcePosition,
@@ -56,11 +57,20 @@ export interface SemanticProgram {
     diagnostics: SemanticDiagnostic[]
 }
 
+interface FunctionSignature {
+    name: string
+    position: SourcePosition
+    parameters: Array<{ name: string; mode: 'in' | 'const' | 'mut' | 'ref' }>
+    returnSemantics: 'unique' | 'const' | 'ref' | null
+    returnTypeName: string | null
+}
+
 export function analyzeProgram(program: Program): SemanticProgram {
     const bindings = new Map<string, ValueSet>()
     const bindingStates = new Map<string, SemanticBinding>()
     const subsetAliases = new Map<string, ValueSet>()
     const diagnostics: SemanticDiagnostic[] = []
+    const functionSignatures = collectFunctionSignatures(program, diagnostics)
 
     for (const statement of program.statements) {
         analyzeStatement(
@@ -68,6 +78,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
             bindings,
             bindingStates,
             subsetAliases,
+            functionSignatures,
             diagnostics,
         )
     }
@@ -75,11 +86,146 @@ export function analyzeProgram(program: Program): SemanticProgram {
     return { bindings, bindingStates, diagnostics }
 }
 
+function functionSignatureKey(name: string, arity: number): string {
+    return `${name}/${arity}`
+}
+
+function collectFunctionSignatures(
+    program: Program,
+    diagnostics: SemanticDiagnostic[],
+): Map<string, FunctionSignature> {
+    const signatures = new Map<string, FunctionSignature>()
+
+    for (const statement of program.statements) {
+        if (statement.kind !== 'FunctionDeclaration') continue
+
+        const signature: FunctionSignature = {
+            name: statement.identifier.name,
+            position: statement.position,
+            parameters: statement.parameters.map((parameter) => ({
+                name: parameter.name,
+                mode: parameter.mode,
+            })),
+            returnSemantics: statement.returnSlot.semantics,
+            returnTypeName: statement.returnSlot.typeName,
+        }
+
+        const key = functionSignatureKey(
+            statement.identifier.name,
+            statement.parameters.length,
+        )
+        const existing = signatures.get(key)
+        if (existing) {
+            diagnostics.push({
+                position: statement.position,
+                message: `duplicate function signature '${statement.identifier.name}/${statement.parameters.length}'`,
+            })
+            continue
+        }
+
+        signatures.set(key, signature)
+    }
+
+    return signatures
+}
+
+function inferCallArgumentSemanticsClass(
+    expression: Expression,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
+): 'isolated' | 'shared' | 'unknown' {
+    if (expression.kind === 'Identifier') {
+        const binding = bindingStates.get(expression.name)
+        if (!binding) return 'unknown'
+        return binding.semantics === 'ref' ? 'shared' : 'isolated'
+    }
+
+    if (
+        expression.kind === 'CallExpression' &&
+        expression.callee.kind === 'Identifier'
+    ) {
+        const signature = functionSignatures.get(
+            functionSignatureKey(
+                expression.callee.name,
+                expression.arguments.length,
+            ),
+        )
+        if (!signature) return 'unknown'
+        if (signature.returnSemantics === 'ref') return 'shared'
+        return 'isolated'
+    }
+
+    // Literals and computed values are treated as isolated by default in V1.
+    return 'isolated'
+}
+
+function validateFunctionCallSemantics(
+    call: CallExpression,
+    signature: FunctionSignature,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    for (let i = 0; i < signature.parameters.length; i += 1) {
+        const parameter = signature.parameters[i]
+        const argument = call.arguments[i]
+        const semantics = inferCallArgumentSemanticsClass(
+            argument.value,
+            bindingStates,
+            functionSignatures,
+        )
+
+        if (parameter.mode === 'in') continue
+
+        if (
+            (parameter.mode === 'const' || parameter.mode === 'mut') &&
+            semantics === 'shared'
+        ) {
+            diagnostics.push({
+                position: call.position,
+                message: `argument ${i + 1} for parameter '${parameter.name}' requires isolated semantics (${parameter.mode}), got shared`,
+            })
+            continue
+        }
+
+        if (parameter.mode === 'ref' && semantics === 'isolated') {
+            diagnostics.push({
+                position: call.position,
+                message: `argument ${i + 1} for parameter '${parameter.name}' requires shared ref semantics, got isolated`,
+            })
+        }
+    }
+}
+
+function valueSetFromFunctionReturn(
+    signature: FunctionSignature,
+): ValueSet | null {
+    if (!signature.returnTypeName) return null
+
+    switch (signature.returnTypeName) {
+        case 'integer':
+            return integerTop()
+        case 'real':
+            return realTop()
+        case 'truthvalue':
+            return truthvalueTop()
+        case 'string':
+            return stringTop()
+        case 'bitfield':
+            return bitfieldSet()
+        case 'tritfield':
+            return tritfieldSet()
+        default:
+            return null
+    }
+}
+
 function analyzeStatement(
     statement: Statement,
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ) {
     switch (statement.kind) {
@@ -91,7 +237,9 @@ function analyzeStatement(
             const inferred = inferDeclarationBinding(
                 statement,
                 bindings,
+                bindingStates,
                 subsetAliases,
+                functionSignatures,
                 diagnostics,
             )
             if (inferred) {
@@ -105,12 +253,19 @@ function analyzeStatement(
                 statement,
                 bindings,
                 bindingStates,
+                functionSignatures,
                 diagnostics,
             )
             return
         }
         case 'ExpressionStatement': {
-            inferExpressionValueSet(statement.expression, bindings, diagnostics)
+            inferExpressionValueSet(
+                statement.expression,
+                bindings,
+                bindingStates,
+                functionSignatures,
+                diagnostics,
+            )
             return
         }
         case 'FunctionDeclaration': {
@@ -123,6 +278,7 @@ function analyzeStatement(
                 bindings,
                 bindingStates,
                 subsetAliases,
+                functionSignatures,
                 diagnostics,
             )
             return
@@ -236,6 +392,7 @@ function analyzeAssignmentStatement(
     statement: AssignmentStatement,
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ) {
     const binding = bindingStates.get(statement.target.name)
@@ -258,6 +415,8 @@ function analyzeAssignmentStatement(
     const assigned = inferExpressionValueSet(
         statement.value,
         bindings,
+        bindingStates,
+        functionSignatures,
         diagnostics,
     )
     if (!assigned) return
@@ -283,11 +442,14 @@ function analyzeIfStatement(
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ) {
     const predicate = inferExpressionValueSet(
         statement.predicate,
         bindings,
+        bindingStates,
+        functionSignatures,
         diagnostics,
     )
 
@@ -336,6 +498,7 @@ function analyzeIfStatement(
                 thenBindings,
                 thenBindingStates,
                 subsetAliases,
+                functionSignatures,
                 diagnostics,
             )
         }
@@ -348,6 +511,7 @@ function analyzeIfStatement(
                 elseBindings,
                 elseBindingStates,
                 subsetAliases,
+                functionSignatures,
                 diagnostics,
             )
         }
@@ -451,12 +615,16 @@ function applyTruthBranchConstraints(
 function inferDeclarationBinding(
     statement: VariableDeclaration,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): SemanticBinding | null {
     const initializer = inferExpressionValueSet(
         statement.initializer,
         bindings,
+        bindingStates,
+        functionSignatures,
         diagnostics,
     )
 
@@ -520,6 +688,8 @@ function inferDeclarationBinding(
 function inferExpressionValueSet(
     expression: Expression,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     switch (expression.kind) {
@@ -541,11 +711,29 @@ function inferExpressionValueSet(
         case 'StringLiteral':
             return stringSingleton(expression.value)
         case 'UnaryExpression':
-            return inferUnaryValueSet(expression, bindings, diagnostics)
+            return inferUnaryValueSet(
+                expression,
+                bindings,
+                bindingStates,
+                functionSignatures,
+                diagnostics,
+            )
         case 'BinaryExpression':
-            return inferBinaryValueSet(expression, bindings, diagnostics)
+            return inferBinaryValueSet(
+                expression,
+                bindings,
+                bindingStates,
+                functionSignatures,
+                diagnostics,
+            )
         case 'CallExpression':
-            return inferCallValueSet(expression, bindings, diagnostics)
+            return inferCallValueSet(
+                expression,
+                bindings,
+                bindingStates,
+                functionSignatures,
+                diagnostics,
+            )
         case 'MemberExpression':
             return null
     }
@@ -554,11 +742,15 @@ function inferExpressionValueSet(
 function inferUnaryValueSet(
     expression: UnaryExpression,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     const operand = inferExpressionValueSet(
         expression.operand,
         bindings,
+        bindingStates,
+        functionSignatures,
         diagnostics,
     )
     if (!operand) return null
@@ -615,12 +807,22 @@ function inferUnaryValueSet(
 function inferBinaryValueSet(
     expression: BinaryExpression,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
-    const left = inferExpressionValueSet(expression.left, bindings, diagnostics)
+    const left = inferExpressionValueSet(
+        expression.left,
+        bindings,
+        bindingStates,
+        functionSignatures,
+        diagnostics,
+    )
     const right = inferExpressionValueSet(
         expression.right,
         bindings,
+        bindingStates,
+        functionSignatures,
         diagnostics,
     )
     if (!left || !right) return null
@@ -709,15 +911,40 @@ function inferBinaryValueSet(
 function inferCallValueSet(
     expression: CallExpression,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     if (expression.callee.kind !== 'Identifier') return null
+
+    const userFunction = functionSignatures.get(
+        functionSignatureKey(
+            expression.callee.name,
+            expression.arguments.length,
+        ),
+    )
+    if (userFunction) {
+        validateFunctionCallSemantics(
+            expression,
+            userFunction,
+            bindingStates,
+            functionSignatures,
+            diagnostics,
+        )
+        return valueSetFromFunctionReturn(userFunction)
+    }
 
     if (
         expression.callee.name !== 'bitfield' &&
         expression.callee.name !== 'tritfield'
     ) {
-        return inferTruthCallableValueSet(expression, bindings, diagnostics)
+        return inferTruthCallableValueSet(
+            expression,
+            bindings,
+            bindingStates,
+            functionSignatures,
+            diagnostics,
+        )
     }
 
     if (expression.arguments.length !== 1) {
@@ -757,6 +984,8 @@ type TruthValueAtom = 'false' | 'ambiguous' | 'true'
 function inferTruthCallableValueSet(
     expression: CallExpression,
     bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet | null {
     if (expression.callee.kind !== 'Identifier') return null
@@ -768,6 +997,8 @@ function inferTruthCallableValueSet(
         const vs = inferExpressionValueSet(
             args[argIndex].value,
             bindings,
+            bindingStates,
+            functionSignatures,
             diagnostics,
         )
         if (!vs || vs.family !== 'truthvalue') return null

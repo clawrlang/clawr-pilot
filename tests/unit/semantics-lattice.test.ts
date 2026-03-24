@@ -540,6 +540,56 @@ describe('semantic scaffold', () => {
     })
 })
 
+describe('function parameter mode call checks', () => {
+    it('rejects isolated argument passed to ref parameter', () => {
+        const program = parseClawr(
+            [
+                'func takesRef(x: ref integer) -> integer {',
+                '  const z = 1',
+                '}',
+                'mut x = 1',
+                'takesRef(x)',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "argument 1 for parameter 'x' requires shared ref semantics, got isolated",
+        ])
+    })
+
+    it('rejects shared argument passed to const parameter but allows in parameter', () => {
+        const program = parseClawr(
+            [
+                'func makeShared() -> ref integer {',
+                '  const z = 1',
+                '}',
+                'func takesConst(x: const integer) -> integer {',
+                '  const y = 1',
+                '}',
+                'func takesIn(x: integer) -> integer {',
+                '  const y = 1',
+                '}',
+                'takesConst(makeShared())',
+                'takesIn(makeShared())',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "argument 1 for parameter 'x' requires isolated semantics (const), got shared",
+        ])
+    })
+})
+
 describe('truthvalue callable narrowing', () => {
     function infer(source: string) {
         return analyzeProgram(parseClawr(source, 'test'))
