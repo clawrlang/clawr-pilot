@@ -118,12 +118,26 @@ export type SubsetConstraint =
 
 export type Statement =
     | SubsetDeclaration
+    | DataDeclaration
     | VariableDeclaration
     | AssignmentStatement
     | ExpressionStatement
     | ReturnStatement
     | FunctionDeclaration
     | IfStatement
+
+export interface DataFieldDeclaration {
+    position: SourcePosition
+    name: string
+    typeAnnotation: TypeAnnotation
+}
+
+export interface DataDeclaration {
+    kind: 'DataDeclaration'
+    position: SourcePosition
+    identifier: IdentifierExpression
+    fields: DataFieldDeclaration[]
+}
 
 export interface FunctionParameter {
     position: SourcePosition

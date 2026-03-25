@@ -352,14 +352,17 @@ function lowerStatementInFunctionBody(
         return
     }
 
-    lowerExpressionStatement(
-        statement,
-        statements,
-        variableKinds,
-        tritfieldLengths,
-        bitfieldLengths,
-        nextTemp,
-    )
+    if (statement.kind === 'ExpressionStatement') {
+        lowerExpressionStatement(
+            statement,
+            statements,
+            variableKinds,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
 }
 
 function lowerIfStatementInFunctionBody(
@@ -645,14 +648,17 @@ function lowerStatement(
         return
     }
 
-    lowerExpressionStatement(
-        statement,
-        statements,
-        variableKinds,
-        tritfieldLengths,
-        bitfieldLengths,
-        nextTemp,
-    )
+    if (statement.kind === 'ExpressionStatement') {
+        lowerExpressionStatement(
+            statement,
+            statements,
+            variableKinds,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
 }
 
 function lowerAssignmentStatement(

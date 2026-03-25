@@ -408,6 +408,80 @@ describe('parser subset declarations', () => {
     })
 })
 
+describe('parser data declarations', () => {
+    it('parses data declarations with typed fields', () => {
+        const program = parseClawr(
+            'data Person { age: integer, alive: truthvalue }',
+            'test',
+        )
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'DataDeclaration',
+            identifier: { name: 'Person' },
+            fields: [
+                {
+                    name: 'age',
+                    typeAnnotation: {
+                        kind: 'subset',
+                        family: 'integer',
+                    },
+                },
+                {
+                    name: 'alive',
+                    typeAnnotation: {
+                        kind: 'subset',
+                        family: 'truthvalue',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('parses data declarations with newline-separated fields', () => {
+        const program = parseClawr(
+            [
+                'data Person {',
+                '  age: integer',
+                '  alive: truthvalue',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements).toHaveLength(1)
+        expect(program.statements[0]).toMatchObject({
+            kind: 'DataDeclaration',
+            identifier: { name: 'Person' },
+            fields: [
+                {
+                    name: 'age',
+                    typeAnnotation: {
+                        kind: 'subset',
+                        family: 'integer',
+                    },
+                },
+                {
+                    name: 'alive',
+                    typeAnnotation: {
+                        kind: 'subset',
+                        family: 'truthvalue',
+                    },
+                },
+            ],
+        })
+    })
+
+    it('rejects malformed field separators', () => {
+        expect(() =>
+            parseClawr(
+                'data Person { age: integer alive: truthvalue }',
+                'test',
+            ),
+        ).toThrowError(/Expected , or } in data field list/)
+    })
+})
+
 describe('parser lane type annotations', () => {
     it('parses binarylane and ternarylane type annotations', () => {
         const program = parseClawr(

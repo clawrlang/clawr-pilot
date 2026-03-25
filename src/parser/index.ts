@@ -6,6 +6,8 @@ import type {
     BinaryExpression,
     CallArgument,
     CallExpression,
+    DataDeclaration,
+    DataFieldDeclaration,
     Expression,
     ExpressionStatement,
     FunctionDeclaration,
@@ -62,6 +64,9 @@ export class Parser {
     }
 
     parseStatement(): Statement {
+        const dataDeclaration = this.tryParseDataDeclaration()
+        if (dataDeclaration) return dataDeclaration
+
         const subsetDeclaration = this.tryParseSubsetDeclaration()
         if (subsetDeclaration) return subsetDeclaration
 
@@ -380,6 +385,103 @@ export class Parser {
             },
             family: familyToken.identifier,
             constraint: constraint?.constraint ?? null,
+        }
+    }
+
+    tryParseDataDeclaration(): DataDeclaration | null {
+        const probe = this.stream.clone()
+        const maybeData = probe.next({ skippingNewline: true })
+        const maybeName = probe.peek({ skippingNewline: true })
+
+        if (
+            !maybeData ||
+            maybeData.kind !== 'KEYWORD' ||
+            maybeData.keyword !== 'data' ||
+            !maybeName ||
+            maybeName.kind !== 'IDENTIFIER'
+        ) {
+            return null
+        }
+
+        const dataToken = this.stream.expect('KEYWORD', 'data')
+        const nameToken = this.stream.expect('IDENTIFIER')
+        this.stream.expect('PUNCTUATION', '{')
+
+        const fields: DataFieldDeclaration[] = []
+        let closeBraceToken: Token | null = null
+
+        let next = this.stream.peek()
+        if (!next) throw new Error('Unexpected EOF in data declaration')
+
+        while (!(next.kind === 'PUNCTUATION' && next.symbol === '}')) {
+            while (next && next.kind === 'NEWLINE') {
+                this.stream.next()
+                next = this.stream.peek()
+            }
+            if (!next) throw new Error('Unexpected EOF in data declaration')
+            if (next.kind === 'PUNCTUATION' && next.symbol === '}') break
+
+            const fieldNameToken = this.stream.expect('IDENTIFIER')
+            this.stream.expect('PUNCTUATION', ':')
+            const typeAnnotation = this.parseTypeAnnotation()
+
+            const separatorToken = this.stream.peek({ skippingNewline: true })
+            const fieldPosition = this.mergePositions(
+                this.positionFromToken(fieldNameToken),
+                (separatorToken && separatorToken.kind === 'PUNCTUATION'
+                    ? this.positionFromToken(separatorToken)
+                    : this.positionFromToken(fieldNameToken)) as SourcePosition,
+            )
+
+            fields.push({
+                position: fieldPosition,
+                name: fieldNameToken.identifier,
+                typeAnnotation,
+            })
+
+            next = this.stream.peek()
+            if (!next) throw new Error('Unexpected EOF in data declaration')
+
+            if (next.kind === 'PUNCTUATION' && next.symbol === ',') {
+                this.stream.next()
+                next = this.stream.peek()
+                while (next && next.kind === 'NEWLINE') {
+                    this.stream.next()
+                    next = this.stream.peek()
+                }
+                if (!next) throw new Error('Unexpected EOF in data declaration')
+                continue
+            }
+
+            if (next.kind === 'NEWLINE') {
+                continue
+            }
+
+            if (next.kind === 'PUNCTUATION' && next.symbol === '}') {
+                break
+            }
+
+            throw parseError(
+                this.file,
+                next,
+                'Expected , or } in data field list',
+            )
+        }
+
+        closeBraceToken = this.stream.expect('PUNCTUATION', '}')
+
+        return {
+            kind: 'DataDeclaration',
+            position: this.mergePositions(
+                this.positionFromToken(dataToken),
+                this.positionFromToken(closeBraceToken),
+            ),
+            identifier: {
+                kind: 'Identifier',
+                position: this.positionFromToken(nameToken),
+                name: nameToken.identifier,
+            },
+            fields,
         }
     }
 
