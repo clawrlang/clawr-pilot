@@ -60,9 +60,17 @@ export interface SemanticProgram {
 interface FunctionSignature {
     name: string
     position: SourcePosition
-    parameters: Array<{ name: string; mode: 'in' | 'const' | 'mut' | 'ref' }>
+    parameters: Array<{
+        name: string
+        mode: 'in' | 'const' | 'mut' | 'ref'
+        typeName: string | null
+    }>
     returnSemantics: 'unique' | 'const' | 'ref' | null
     returnTypeName: string | null
+}
+
+interface FunctionAnalysisContext {
+    signature: FunctionSignature
 }
 
 export function analyzeProgram(program: Program): SemanticProgram {
@@ -80,6 +88,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
             subsetAliases,
             functionSignatures,
             diagnostics,
+            null,
         )
     }
 
@@ -105,6 +114,7 @@ function collectFunctionSignatures(
             parameters: statement.parameters.map((parameter) => ({
                 name: parameter.name,
                 mode: parameter.mode,
+                typeName: parameter.typeName,
             })),
             returnSemantics: statement.returnSlot.semantics,
             returnTypeName: statement.returnSlot.typeName,
@@ -156,6 +166,36 @@ function inferCallArgumentSemanticsClass(
     }
 
     // Literals and computed values are treated as isolated by default in V1.
+    return 'isolated'
+}
+
+function inferExpressionSemanticsClass(
+    expression: Expression,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
+): 'isolated' | 'shared' | 'unique-return' | 'unknown' {
+    if (expression.kind === 'Identifier') {
+        const binding = bindingStates.get(expression.name)
+        if (!binding) return 'unknown'
+        return binding.semantics === 'ref' ? 'shared' : 'isolated'
+    }
+
+    if (
+        expression.kind === 'CallExpression' &&
+        expression.callee.kind === 'Identifier'
+    ) {
+        const signature = functionSignatures.get(
+            functionSignatureKey(
+                expression.callee.name,
+                expression.arguments.length,
+            ),
+        )
+        if (!signature) return 'unknown'
+        if (signature.returnSemantics === 'ref') return 'shared'
+        if (signature.returnSemantics === 'unique') return 'unique-return'
+        return 'isolated'
+    }
+
     return 'isolated'
 }
 
@@ -269,6 +309,7 @@ function analyzeStatement(
     subsetAliases: Map<string, ValueSet>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
+    functionContext: FunctionAnalysisContext | null,
 ) {
     switch (statement.kind) {
         case 'SubsetDeclaration': {
@@ -311,7 +352,23 @@ function analyzeStatement(
             return
         }
         case 'FunctionDeclaration': {
-            // Function semantics are parsed but not analyzed in this vertical slice.
+            analyzeFunctionDeclaration(
+                statement,
+                subsetAliases,
+                functionSignatures,
+                diagnostics,
+            )
+            return
+        }
+        case 'ReturnStatement': {
+            analyzeReturnStatement(
+                statement,
+                bindings,
+                bindingStates,
+                functionSignatures,
+                diagnostics,
+                functionContext,
+            )
             return
         }
         case 'IfStatement': {
@@ -322,9 +379,160 @@ function analyzeStatement(
                 subsetAliases,
                 functionSignatures,
                 diagnostics,
+                functionContext,
             )
             return
         }
+    }
+}
+
+function topValueSetForTypeName(typeName: string | null): ValueSet {
+    switch (typeName) {
+        case 'integer':
+            return integerTop()
+        case 'real':
+            return realTop()
+        case 'truthvalue':
+            return truthvalueTop()
+        case 'string':
+            return stringTop()
+        case 'bitfield':
+            return bitfieldSet()
+        case 'tritfield':
+            return tritfieldSet()
+        default:
+            return neverValueSet
+    }
+}
+
+function analyzeFunctionDeclaration(
+    statement: FunctionDeclaration,
+    subsetAliases: Map<string, ValueSet>,
+    functionSignatures: Map<string, FunctionSignature>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    const localBindings = new Map<string, ValueSet>()
+    const localBindingStates = new Map<string, SemanticBinding>()
+
+    for (const parameter of statement.parameters) {
+        const allowed = topValueSetForTypeName(parameter.typeName)
+        const semantics: VariableSemantics =
+            parameter.mode === 'ref'
+                ? 'ref'
+                : parameter.mode === 'mut'
+                  ? 'mut'
+                  : 'const'
+
+        const binding: SemanticBinding = {
+            semantics,
+            current: allowed,
+            allowed,
+        }
+        localBindingStates.set(parameter.name, binding)
+        localBindings.set(parameter.name, binding.current)
+    }
+
+    const signature = functionSignatures.get(
+        functionSignatureKey(
+            statement.identifier.name,
+            statement.parameters.length,
+        ),
+    )
+    if (!signature) return
+
+    const context: FunctionAnalysisContext = { signature }
+    for (const bodyStatement of statement.body) {
+        analyzeStatement(
+            bodyStatement,
+            localBindings,
+            localBindingStates,
+            subsetAliases,
+            functionSignatures,
+            diagnostics,
+            context,
+        )
+    }
+}
+
+function analyzeReturnStatement(
+    statement: Extract<Statement, { kind: 'ReturnStatement' }>,
+    bindings: Map<string, ValueSet>,
+    bindingStates: Map<string, SemanticBinding>,
+    functionSignatures: Map<string, FunctionSignature>,
+    diagnostics: SemanticDiagnostic[],
+    functionContext: FunctionAnalysisContext | null,
+) {
+    if (!functionContext) {
+        diagnostics.push({
+            position: statement.position,
+            message: 'return is only valid inside function bodies',
+        })
+        return
+    }
+
+    const { signature } = functionContext
+    if (!statement.value) {
+        if (signature.returnTypeName) {
+            diagnostics.push({
+                position: statement.position,
+                message: `missing return value for function '${signature.name}'`,
+            })
+        }
+        return
+    }
+
+    if (!signature.returnTypeName) {
+        diagnostics.push({
+            position: statement.position,
+            message: `function '${signature.name}' does not declare a return value`,
+        })
+        return
+    }
+
+    inferExpressionValueSet(
+        statement.value,
+        bindings,
+        bindingStates,
+        functionSignatures,
+        diagnostics,
+    )
+
+    const expressionSemantics = inferExpressionSemanticsClass(
+        statement.value,
+        bindingStates,
+        functionSignatures,
+    )
+
+    if (
+        signature.returnSemantics === 'ref' &&
+        expressionSemantics !== 'shared'
+    ) {
+        diagnostics.push({
+            position: statement.position,
+            message: `return in function '${signature.name}' requires shared semantics for '-> ref', got ${expressionSemantics}`,
+        })
+        return
+    }
+
+    if (
+        signature.returnSemantics === 'const' &&
+        expressionSemantics === 'shared'
+    ) {
+        diagnostics.push({
+            position: statement.position,
+            message: `return in function '${signature.name}' requires isolated semantics for '-> const', got shared`,
+        })
+        return
+    }
+
+    if (
+        signature.returnSemantics === 'unique' &&
+        expressionSemantics !== 'unique-return'
+    ) {
+        diagnostics.push({
+            position: statement.position,
+            message: `return in function '${signature.name}' requires unique-return semantics for '-> T' in this vertical slice`,
+        })
     }
 }
 
@@ -486,6 +694,7 @@ function analyzeIfStatement(
     subsetAliases: Map<string, ValueSet>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
+    functionContext: FunctionAnalysisContext | null,
 ) {
     const predicate = inferExpressionValueSet(
         statement.predicate,
@@ -542,6 +751,7 @@ function analyzeIfStatement(
                 subsetAliases,
                 functionSignatures,
                 diagnostics,
+                functionContext,
             )
         }
     }
@@ -555,6 +765,7 @@ function analyzeIfStatement(
                 subsetAliases,
                 functionSignatures,
                 diagnostics,
+                functionContext,
             )
         }
     }

@@ -160,6 +160,25 @@ describe('parser function and method declarations', () => {
             /Invalid return semantics modifier 'mut'. Use const, ref, or omit for unique return./,
         )
     })
+
+    it('parses return statements inside function bodies', () => {
+        const program = parseClawr(
+            ['func identity(x: integer) -> integer {', '  return x', '}'].join(
+                '\n',
+            ),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'FunctionDeclaration',
+            body: [
+                {
+                    kind: 'ReturnStatement',
+                    value: { kind: 'Identifier', name: 'x' },
+                },
+            ],
+        })
+    })
 })
 
 describe('parser assignments', () => {

@@ -162,6 +162,11 @@ function lowerStatement(
         return
     }
 
+    if (statement.kind === 'ReturnStatement') {
+        // Return statements only participate in function-body semantic checks in this slice.
+        return
+    }
+
     if (statement.kind === 'IfStatement') {
         lowerIfStatement(
             statement,

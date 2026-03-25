@@ -17,6 +17,7 @@ import type {
     MemberExpression,
     Program,
     RealLiteralExpression,
+    ReturnStatement,
     SourcePosition,
     Statement,
     SubsetConstraint,
@@ -72,6 +73,10 @@ export class Parser {
 
         if (token.kind === 'KEYWORD' && token.keyword === 'if') {
             return this.parseIfStatement()
+        }
+
+        if (token.kind === 'KEYWORD' && token.keyword === 'return') {
+            return this.parseReturnStatement()
         }
 
         const functionLike = this.tryParseFunctionLikeDeclaration()
@@ -981,6 +986,34 @@ export class Parser {
             predicate,
             thenStatements,
             elseStatements,
+        }
+    }
+
+    parseReturnStatement(): ReturnStatement {
+        const returnToken = this.stream.expect('KEYWORD', 'return')
+        const next = this.stream.peek()
+
+        if (
+            !next ||
+            next.kind === 'NEWLINE' ||
+            (next.kind === 'PUNCTUATION' &&
+                (next.symbol === ';' || next.symbol === '}'))
+        ) {
+            return {
+                kind: 'ReturnStatement',
+                position: this.positionFromToken(returnToken),
+                value: null,
+            }
+        }
+
+        const value = this.parseExpression()
+        return {
+            kind: 'ReturnStatement',
+            position: this.mergePositions(
+                this.positionFromToken(returnToken),
+                value.position,
+            ),
+            value,
         }
     }
 

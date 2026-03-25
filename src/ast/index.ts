@@ -121,6 +121,7 @@ export type Statement =
     | VariableDeclaration
     | AssignmentStatement
     | ExpressionStatement
+    | ReturnStatement
     | FunctionDeclaration
     | IfStatement
 
@@ -168,6 +169,12 @@ export interface ExpressionStatement {
     kind: 'ExpressionStatement'
     position: SourcePosition
     expression: Expression
+}
+
+export interface ReturnStatement {
+    kind: 'ReturnStatement'
+    position: SourcePosition
+    value: Expression | null
 }
 
 export interface AssignmentStatement {

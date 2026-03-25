@@ -615,6 +615,86 @@ describe('function parameter mode call checks', () => {
     })
 })
 
+describe('function return mode checks', () => {
+    it('rejects isolated returns for -> ref functions', () => {
+        const program = parseClawr(
+            [
+                'func bad(x: integer) -> ref integer {',
+                '  return x',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "return in function 'bad' requires shared semantics for '-> ref', got isolated",
+        ])
+    })
+
+    it('rejects shared returns for -> const functions', () => {
+        const program = parseClawr(
+            [
+                'func makeShared() -> ref integer {',
+                '  const z = 1',
+                '}',
+                'func bad() -> const integer {',
+                '  return makeShared()',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "return in function 'bad' requires isolated semantics for '-> const', got shared",
+        ])
+    })
+
+    it('rejects non-unique returns for -> T in this vertical slice', () => {
+        const program = parseClawr(
+            [
+                'func bad(x: integer) -> integer {',
+                '  return x',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            "return in function 'bad' requires unique-return semantics for '-> T' in this vertical slice",
+        ])
+    })
+
+    it('accepts unique-return expressions for -> T', () => {
+        const program = parseClawr(
+            [
+                'func makeUnique() -> integer {',
+                '  const z = 1',
+                '}',
+                'func ok() -> integer {',
+                '  return makeUnique()',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+})
+
 describe('truthvalue callable narrowing', () => {
     function infer(source: string) {
         return analyzeProgram(parseClawr(source, 'test'))
