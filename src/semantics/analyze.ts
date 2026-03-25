@@ -50,11 +50,17 @@ export interface SemanticBinding {
     allowed: ValueSet
 }
 
+export interface ReturnNormalization {
+    functionName: string
+    position: SourcePosition
+}
+
 export interface SemanticProgram {
     // Legacy map kept for compatibility with existing tests and callers.
     bindings: Map<string, ValueSet>
     bindingStates: Map<string, SemanticBinding>
     diagnostics: SemanticDiagnostic[]
+    returnsRequiringNormalization: ReturnNormalization[]
 }
 
 interface FunctionSignature {
@@ -78,6 +84,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
     const bindingStates = new Map<string, SemanticBinding>()
     const subsetAliases = new Map<string, ValueSet>()
     const diagnostics: SemanticDiagnostic[] = []
+    const returnsRequiringNormalization: ReturnNormalization[] = []
     const functionSignatures = collectFunctionSignatures(program, diagnostics)
 
     for (const statement of program.statements) {
@@ -89,10 +96,16 @@ export function analyzeProgram(program: Program): SemanticProgram {
             functionSignatures,
             diagnostics,
             null,
+            returnsRequiringNormalization,
         )
     }
 
-    return { bindings, bindingStates, diagnostics }
+    return {
+        bindings,
+        bindingStates,
+        diagnostics,
+        returnsRequiringNormalization,
+    }
 }
 
 function functionSignatureKey(name: string, arity: number): string {
@@ -310,6 +323,7 @@ function analyzeStatement(
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     functionContext: FunctionAnalysisContext | null,
+    returnsRequiringNormalization: ReturnNormalization[] = [],
 ) {
     switch (statement.kind) {
         case 'SubsetDeclaration': {
@@ -357,6 +371,7 @@ function analyzeStatement(
                 subsetAliases,
                 functionSignatures,
                 diagnostics,
+                returnsRequiringNormalization,
             )
             return
         }
@@ -368,6 +383,7 @@ function analyzeStatement(
                 functionSignatures,
                 diagnostics,
                 functionContext,
+                returnsRequiringNormalization,
             )
             return
         }
@@ -380,6 +396,7 @@ function analyzeStatement(
                 functionSignatures,
                 diagnostics,
                 functionContext,
+                returnsRequiringNormalization,
             )
             return
         }
@@ -410,6 +427,7 @@ function analyzeFunctionDeclaration(
     subsetAliases: Map<string, ValueSet>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
+    returnsRequiringNormalization: ReturnNormalization[] = [],
 ) {
     const localBindings = new Map<string, ValueSet>()
     const localBindingStates = new Map<string, SemanticBinding>()
@@ -450,6 +468,7 @@ function analyzeFunctionDeclaration(
             functionSignatures,
             diagnostics,
             context,
+            returnsRequiringNormalization,
         )
     }
 
@@ -495,6 +514,7 @@ function analyzeReturnStatement(
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     functionContext: FunctionAnalysisContext | null,
+    returnsRequiringNormalization: ReturnNormalization[] = [],
 ) {
     if (!functionContext) {
         diagnostics.push({
@@ -578,10 +598,21 @@ function analyzeReturnStatement(
         signature.returnSemantics === 'unique' &&
         expressionSemantics !== 'unique-return'
     ) {
-        diagnostics.push({
-            position: statement.position,
-            message: `return in function '${signature.name}' requires unique-return semantics for '-> T' in this vertical slice`,
-        })
+        if (expressionSemantics === 'isolated') {
+            // Mark for conservative normalization: the return value is isolated but
+            // not provably unique. At codegen time, it will be normalized via mutateRC()
+            // to ensure the unique-return contract is satisfied.
+            returnsRequiringNormalization.push({
+                functionName: signature.name,
+                position: statement.position,
+            })
+        } else {
+            // Shared expression cannot be returned as -> T even with normalization
+            diagnostics.push({
+                position: statement.position,
+                message: `return in function '${signature.name}' requires unique-return semantics for '-> T', got shared`,
+            })
+        }
     }
 }
 
@@ -744,6 +775,7 @@ function analyzeIfStatement(
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     functionContext: FunctionAnalysisContext | null,
+    returnsRequiringNormalization: ReturnNormalization[] = [],
 ) {
     const predicate = inferExpressionValueSet(
         statement.predicate,
@@ -801,6 +833,7 @@ function analyzeIfStatement(
                 functionSignatures,
                 diagnostics,
                 functionContext,
+                returnsRequiringNormalization,
             )
         }
     }
@@ -815,6 +848,7 @@ function analyzeIfStatement(
                 functionSignatures,
                 diagnostics,
                 functionContext,
+                returnsRequiringNormalization,
             )
         }
     }

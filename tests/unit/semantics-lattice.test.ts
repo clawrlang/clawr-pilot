@@ -627,11 +627,7 @@ describe('function parameter mode call checks', () => {
 describe('function return mode checks', () => {
     it('rejects returns whose value family does not match the declared return type', () => {
         const program = parseClawr(
-            [
-                'func bad() -> integer {',
-                '  return true',
-                '}',
-            ].join('\n'),
+            ['func bad() -> integer {', '  return true', '}'].join('\n'),
             'test',
         )
 
@@ -646,11 +642,9 @@ describe('function return mode checks', () => {
 
     it('rejects isolated returns for -> ref functions', () => {
         const program = parseClawr(
-            [
-                'func bad(x: integer) -> ref integer {',
-                '  return x',
-                '}',
-            ].join('\n'),
+            ['func bad(x: integer) -> ref integer {', '  return x', '}'].join(
+                '\n',
+            ),
             'test',
         )
 
@@ -685,10 +679,10 @@ describe('function return mode checks', () => {
         ])
     })
 
-    it('rejects non-unique returns for -> T in this vertical slice', () => {
+    it('marks isolated non-unique returns for -> T for conservative normalization', () => {
         const program = parseClawr(
             [
-                'func bad(x: integer) -> integer {',
+                'func needsNormalization(x: integer) -> integer {',
                 '  return x',
                 '}',
             ].join('\n'),
@@ -697,10 +691,32 @@ describe('function return mode checks', () => {
 
         const semanticProgram = analyzeProgram(program)
 
+        // No diagnostic: isolated non-unique returns are marked for normalization, not rejected
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([])
+
+        // The return should be marked as requiring conservative normalization
+        expect(semanticProgram.returnsRequiringNormalization).toHaveLength(1)
+        expect(
+            semanticProgram.returnsRequiringNormalization[0].functionName,
+        ).toBe('needsNormalization')
+    })
+
+    it('rejects shared returns for -> T', () => {
+        const program = parseClawr(
+            ['func bad(x: ref integer) -> integer {', '  return x', '}'].join(
+                '\n',
+            ),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
         expect(
             semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
         ).toEqual([
-            "return in function 'bad' requires unique-return semantics for '-> T' in this vertical slice",
+            "return in function 'bad' requires unique-return semantics for '-> T', got shared",
         ])
     })
 
@@ -724,11 +740,7 @@ describe('function return mode checks', () => {
 
     it('rejects functions that may exit without returning a value', () => {
         const program = parseClawr(
-            [
-                'func bad() -> integer {',
-                '  const x = 1',
-                '}',
-            ].join('\n'),
+            ['func bad() -> integer {', '  const x = 1', '}'].join('\n'),
             'test',
         )
 
