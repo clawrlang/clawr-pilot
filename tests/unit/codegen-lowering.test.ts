@@ -1,6 +1,83 @@
 import { describe, expect, it } from 'bun:test'
 import { parseClawr } from '../../src/parser'
 import { lowerToCIr } from '../../src/codegen'
+import type { CExpression, CStatement, CTranslationUnit } from '../../src/ir/c'
+
+type CallTraceEntry = {
+    callee: string
+    args: string[]
+}
+
+function findMainFunction(ir: CTranslationUnit) {
+    const main = ir.functions.find((fn) => fn.name === 'main')
+    if (!main) {
+        throw new Error('Expected lowered IR to contain a main function')
+    }
+    return main
+}
+
+function expressionIdentifierName(expression: CExpression): string | null {
+    return expression.kind === 'CIdentifier' ? expression.name : null
+}
+
+function appendStatementCalls(statement: CStatement, calls: CallTraceEntry[]) {
+    if (
+        statement.kind === 'CExpressionStatement' &&
+        statement.expression.kind === 'CCallExpression'
+    ) {
+        calls.push({
+            callee: statement.expression.callee,
+            args: statement.expression.args
+                .map(expressionIdentifierName)
+                .filter((value): value is string => value !== null),
+        })
+        return
+    }
+
+    if (statement.kind === 'CIfStatement') {
+        for (const nested of statement.thenStatements) {
+            appendStatementCalls(nested, calls)
+        }
+        for (const nested of statement.elseStatements) {
+            appendStatementCalls(nested, calls)
+        }
+    }
+}
+
+function collectMainCallTrace(ir: CTranslationUnit): CallTraceEntry[] {
+    const calls: CallTraceEntry[] = []
+    const main = findMainFunction(ir)
+    for (const statement of main.statements) {
+        appendStatementCalls(statement, calls)
+    }
+    return calls
+}
+
+function countCalls(trace: CallTraceEntry[], callee: string): number {
+    return trace.filter((entry) => entry.callee === callee).length
+}
+
+function hasCallWithIdentifierArg(
+    trace: CallTraceEntry[],
+    callee: string,
+    identifierName: string,
+): boolean {
+    return trace.some(
+        (entry) =>
+            entry.callee === callee && entry.args.includes(identifierName),
+    )
+}
+
+function countCallsWithIdentifierArg(
+    trace: CallTraceEntry[],
+    callee: string,
+    identifierName: string,
+): number {
+    return trace.filter(
+        (entry) =>
+            entry.callee === callee && entry.args.includes(identifierName),
+    ).length
+}
 
 describe('codegen lowering behavior', () => {
     it('lowers tritfield constructor with canonical lane encoding', () => {
@@ -229,11 +306,15 @@ describe('codegen lowering behavior', () => {
 
         const ir = lowerToCIr(parseClawr(source, 'test-assignments.clawr'))
         const serialized = JSON.stringify(ir)
+        const trace = collectMainCallTrace(ir)
 
         expect(serialized).toContain('CAssignmentStatement')
-        expect(serialized).toContain('releaseRC')
         expect(serialized).toContain('clawr_int_from_i64')
         expect(serialized).toContain('Real¸fromString')
+
+        // RC-managed assignment replaces prior bindings.
+        expect(hasCallWithIdentifierArg(trace, 'releaseRC', 'i')).toBe(true)
+        expect(hasCallWithIdentifierArg(trace, 'releaseRC', 'r')).toBe(true)
     })
 
     it('emits mutateRC before isolated integer mutation', () => {
@@ -242,9 +323,9 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(
             parseClawr(source, 'test-isolated-mutate-rc.clawr'),
         )
-        const serialized = JSON.stringify(ir)
+        const trace = collectMainCallTrace(ir)
 
-        expect(serialized).toContain('mutateRC')
+        expect(hasCallWithIdentifierArg(trace, 'mutateRC', 'i')).toBe(true)
     })
 
     it('does not require mutateRC for shared ref assignments', () => {
@@ -253,10 +334,10 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(
             parseClawr(source, 'test-shared-assignment.clawr'),
         )
-        const serialized = JSON.stringify(ir)
+        const trace = collectMainCallTrace(ir)
 
-        expect(serialized).not.toContain('mutateRC')
-        expect(serialized).toContain('releaseRC')
+        expect(countCalls(trace, 'mutateRC')).toBe(0)
+        expect(hasCallWithIdentifierArg(trace, 'releaseRC', 's')).toBe(true)
     })
 
     it('retains borrowed integer aliases on declaration and assignment', () => {
@@ -272,12 +353,15 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(
             parseClawr(source, 'test-borrowed-int-alias.clawr'),
         )
-        const serialized = JSON.stringify(ir)
+        const trace = collectMainCallTrace(ir)
 
-        expect(serialized).toContain('retainRC')
+        // Borrowed integer identifiers must be retained when aliased.
+        expect(countCalls(trace, 'retainRC')).toBeGreaterThanOrEqual(1)
+        expect(hasCallWithIdentifierArg(trace, 'retainRC', 'a')).toBe(true)
+        expect(hasCallWithIdentifierArg(trace, 'retainRC', 'b')).toBe(true)
     })
 
-    it('moves temporary integer values without retain on assignment', () => {
+    it('moves fresh integer temporaries and still releases the old target value', () => {
         const source = [
             'mut i = 1',
             'i = 2 + 3',
@@ -288,10 +372,14 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(
             parseClawr(source, 'test-int-temporary-move.clawr'),
         )
-        const serialized = JSON.stringify(ir)
+        const trace = collectMainCallTrace(ir)
 
-        expect(serialized).not.toContain('retainRC')
-        expect(serialized).toContain('releaseRC')
+        // The expression 2 + 3 is lowered from fresh temporaries, so assignment
+        // transport should move without retain.
+        expect(countCalls(trace, 'retainRC')).toBe(0)
+
+        // Replacing i must release i's previous value before rebinding.
+        expect(hasCallWithIdentifierArg(trace, 'releaseRC', 'i')).toBe(true)
     })
 
     it('lowers integer binary operators to Integer runtime calls', () => {
