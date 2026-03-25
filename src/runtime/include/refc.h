@@ -88,6 +88,13 @@ void* _mutateRC(void* const structure);
 /// and the variable requires isolation, the memory is copied.
 #define mutateRC(__var__) __var__ = _mutateRC(__var__)
 
+/// @brief Explicit semantic-conversion copy
+/// Creates a new uniquely referenced allocation with specified semantics.
+/// Used when crossing between isolated and shared memory models.
+/// @param structure the variable to copy
+/// @param semantics either __rc_ISOLATED or __rc_SHARED
+/// @return a new uniquely referenced allocation
+void* copyRC(void* const structure, refs_t const semantics);
 
 /// @brief Add a weak reference to an entity
 /// The pointer will be NULL if the entity is descoped
