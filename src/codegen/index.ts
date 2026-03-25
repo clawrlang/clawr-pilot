@@ -12,7 +12,7 @@ import {
     type CStatement,
     type CTranslationUnit,
 } from '../ir/c'
-import type { RuntimeType } from './lowering-types'
+import type { MutationStrategy, RuntimeType } from './lowering-types'
 import { cExprCode, cTruthValue } from './lowering-utils'
 import { isTruthExpression, lowerTruthExpression } from './truthvalue-lowering'
 import { isIntegerExpression, lowerIntegerExpression } from './integer-lowering'
@@ -32,6 +32,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const heapLocals: string[] = []
     const variableKinds = new Map<string, RuntimeType>()
+    const mutationStrategies = new Map<string, MutationStrategy>()
     const tritfieldLengths = new Map<string, number>()
     const bitfieldLengths = new Map<string, number>()
     let tempCounter = 0
@@ -42,6 +43,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
             mainStatements,
             heapLocals,
             variableKinds,
+            mutationStrategies,
             tritfieldLengths,
             bitfieldLengths,
             () => `__clawr_tmp${tempCounter++}`,
@@ -149,6 +151,7 @@ function lowerStatement(
     statements: CStatement[],
     heapLocals: string[],
     variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
     tritfieldLengths: Map<string, number>,
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
@@ -172,6 +175,7 @@ function lowerStatement(
             statement,
             statements,
             variableKinds,
+            mutationStrategies,
             tritfieldLengths,
             bitfieldLengths,
             nextTemp,
@@ -185,6 +189,7 @@ function lowerStatement(
             statements,
             heapLocals,
             variableKinds,
+            mutationStrategies,
             tritfieldLengths,
             bitfieldLengths,
             nextTemp,
@@ -197,6 +202,7 @@ function lowerStatement(
             statement,
             statements,
             variableKinds,
+            mutationStrategies,
             tritfieldLengths,
             bitfieldLengths,
             nextTemp,
@@ -218,6 +224,7 @@ function lowerAssignmentStatement(
     statement: AssignmentStatement,
     statements: CStatement[],
     variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
     tritfieldLengths: Map<string, number>,
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
@@ -259,6 +266,11 @@ function lowerAssignmentStatement(
             nextTemp,
         )
         statements.push(...lowered.setup)
+        lowerMutationPreparation(
+            statement.target.name,
+            statements,
+            mutationStrategies,
+        )
         statements.push({
             kind: 'CExpressionStatement',
             expression: {
@@ -296,6 +308,11 @@ function lowerAssignmentStatement(
             nextTemp,
         )
         statements.push(...lowered.setup)
+        lowerMutationPreparation(
+            statement.target.name,
+            statements,
+            mutationStrategies,
+        )
         statements.push({
             kind: 'CExpressionStatement',
             expression: {
@@ -341,6 +358,11 @@ function lowerAssignmentStatement(
                     ],
                 },
             })
+            lowerMutationPreparation(
+                statement.target.name,
+                statements,
+                mutationStrategies,
+            )
             statements.push({
                 kind: 'CExpressionStatement',
                 expression: {
@@ -374,6 +396,11 @@ function lowerAssignmentStatement(
                         ],
                     },
                 })
+                lowerMutationPreparation(
+                    statement.target.name,
+                    statements,
+                    mutationStrategies,
+                )
                 statements.push({
                     kind: 'CExpressionStatement',
                     expression: {
@@ -462,6 +489,7 @@ function lowerIfStatement(
     statement: IfStatement,
     statements: CStatement[],
     variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
     tritfieldLengths: Map<string, number>,
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
@@ -481,6 +509,7 @@ function lowerIfStatement(
     const thenStatements: CStatement[] = []
     const thenHeapLocals: string[] = []
     const thenKinds = new Map(variableKinds)
+    const thenMutationStrategies = new Map(mutationStrategies)
     const thenTritfieldLengths = new Map(tritfieldLengths)
     const thenBitfieldLengths = new Map(bitfieldLengths)
     for (const nested of statement.thenStatements) {
@@ -489,6 +518,7 @@ function lowerIfStatement(
             thenStatements,
             thenHeapLocals,
             thenKinds,
+            thenMutationStrategies,
             thenTritfieldLengths,
             thenBitfieldLengths,
             nextTemp,
@@ -508,6 +538,7 @@ function lowerIfStatement(
     const elseStatements: CStatement[] = []
     const elseHeapLocals: string[] = []
     const elseKinds = new Map(variableKinds)
+    const elseMutationStrategies = new Map(mutationStrategies)
     const elseTritfieldLengths = new Map(tritfieldLengths)
     const elseBitfieldLengths = new Map(bitfieldLengths)
     for (const nested of statement.elseStatements) {
@@ -516,6 +547,7 @@ function lowerIfStatement(
             elseStatements,
             elseHeapLocals,
             elseKinds,
+            elseMutationStrategies,
             elseTritfieldLengths,
             elseBitfieldLengths,
             nextTemp,
@@ -549,6 +581,7 @@ function lowerVariableDeclaration(
     statements: CStatement[],
     heapLocals: string[],
     variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
     tritfieldLengths: Map<string, number>,
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
@@ -576,6 +609,10 @@ function lowerVariableDeclaration(
         })
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'integer')
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
         return
     }
 
@@ -599,6 +636,10 @@ function lowerVariableDeclaration(
         heapLocals.push(...detachedHeapTemps)
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'integer')
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
         return
     }
 
@@ -651,6 +692,10 @@ function lowerVariableDeclaration(
         })
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'real')
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
         return
     }
 
@@ -674,6 +719,10 @@ function lowerVariableDeclaration(
         heapLocals.push(...detachedHeapTemps)
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'real')
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
         return
     }
 
@@ -695,6 +744,10 @@ function lowerVariableDeclaration(
         })
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'string')
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
         return
     }
 
@@ -819,6 +872,24 @@ function lowerExpressionStatement(
 function detachOwnedValue(value: CExpression, heapTemps: string[]) {
     if (value.kind !== 'CIdentifier') return heapTemps
     return heapTemps.filter((name) => name !== value.name)
+}
+
+function lowerMutationPreparation(
+    variableName: string,
+    statements: CStatement[],
+    mutationStrategies: Map<string, MutationStrategy>,
+) {
+    const strategy = mutationStrategies.get(variableName)
+    if (strategy !== 'isolated-cow') return
+
+    statements.push({
+        kind: 'CExpressionStatement',
+        expression: {
+            kind: 'CCallExpression',
+            callee: 'mutateRC',
+            args: [{ kind: 'CIdentifier', name: variableName }],
+        },
+    })
 }
 
 function mentionsBitfieldExpression(

@@ -236,6 +236,29 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('Real¸fromString')
     })
 
+    it('emits mutateRC before isolated integer mutation', () => {
+        const source = ['mut i = 1', 'i = 2', ''].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-isolated-mutate-rc.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('mutateRC')
+    })
+
+    it('does not require mutateRC for shared ref assignments', () => {
+        const source = ['ref s = "a"', 's = "b"', ''].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-shared-assignment.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).not.toContain('mutateRC')
+        expect(serialized).toContain('releaseRC')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

@@ -5,3 +5,5 @@ export type RuntimeType =
     | 'string'
     | 'bitfield'
     | 'tritfield'
+
+export type MutationStrategy = 'isolated-cow' | 'shared-in-place'
