@@ -546,8 +546,11 @@ describe('function parameter mode call checks', () => {
     it('rejects isolated argument passed to ref parameter', () => {
         const program = parseClawr(
             [
+                'func makeUnique() -> integer {',
+                '  return makeUnique()',
+                '}',
                 'func takesRef(x: ref integer) -> integer {',
-                '  const z = 1',
+                '  return makeUnique()',
                 '}',
                 'mut x = 1',
                 'takesRef(x)',
@@ -567,11 +570,14 @@ describe('function parameter mode call checks', () => {
     it('rejects non-ref call expressions passed to ref parameters', () => {
         const program = parseClawr(
             [
+                'func makeUnique() -> integer {',
+                '  return makeUnique()',
+                '}',
                 'func makeIsolated() -> integer {',
-                '  const z = 1',
+                '  return makeUnique()',
                 '}',
                 'func takesRef(x: ref integer) -> integer {',
-                '  const y = 1',
+                '  return makeUnique()',
                 '}',
                 'takesRef(makeIsolated())',
             ].join('\n'),
@@ -590,14 +596,17 @@ describe('function parameter mode call checks', () => {
     it('rejects shared argument passed to const parameter but allows in parameter', () => {
         const program = parseClawr(
             [
+                'func makeUnique() -> integer {',
+                '  return makeUnique()',
+                '}',
                 'func makeShared() -> ref integer {',
-                '  const z = 1',
+                '  return makeShared()',
                 '}',
                 'func takesConst(x: const integer) -> integer {',
-                '  const y = 1',
+                '  return makeUnique()',
                 '}',
                 'func takesIn(x: integer) -> integer {',
-                '  const y = 1',
+                '  return makeUnique()',
                 '}',
                 'takesConst(makeShared())',
                 'takesIn(makeShared())',
@@ -616,6 +625,25 @@ describe('function parameter mode call checks', () => {
 })
 
 describe('function return mode checks', () => {
+    it('rejects returns whose value family does not match the declared return type', () => {
+        const program = parseClawr(
+            [
+                'func bad() -> integer {',
+                '  return true',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual([
+            'returned value truthvalue[true] is not assignable to declared return type integer',
+        ])
+    })
+
     it('rejects isolated returns for -> ref functions', () => {
         const program = parseClawr(
             [
@@ -639,7 +667,7 @@ describe('function return mode checks', () => {
         const program = parseClawr(
             [
                 'func makeShared() -> ref integer {',
-                '  const z = 1',
+                '  return makeShared()',
                 '}',
                 'func bad() -> const integer {',
                 '  return makeShared()',
@@ -680,10 +708,49 @@ describe('function return mode checks', () => {
         const program = parseClawr(
             [
                 'func makeUnique() -> integer {',
-                '  const z = 1',
+                '  return makeUnique()',
                 '}',
                 'func ok() -> integer {',
                 '  return makeUnique()',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(semanticProgram.diagnostics).toEqual([])
+    })
+
+    it('rejects functions that may exit without returning a value', () => {
+        const program = parseClawr(
+            [
+                'func bad() -> integer {',
+                '  const x = 1',
+                '}',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+
+        expect(
+            semanticProgram.diagnostics.map((diagnostic) => diagnostic.message),
+        ).toEqual(["function 'bad' may exit without returning a value"])
+    })
+
+    it('accepts if/else bodies that return on all paths', () => {
+        const program = parseClawr(
+            [
+                'func makeUnique() -> integer {',
+                '  return makeUnique()',
+                '}',
+                'func ok(flag: truthvalue) -> integer {',
+                '  if (flag) {',
+                '    return makeUnique()',
+                '  } else {',
+                '    return makeUnique()',
+                '  }',
                 '}',
             ].join('\n'),
             'test',

@@ -452,6 +452,40 @@ function analyzeFunctionDeclaration(
             context,
         )
     }
+
+    if (
+        signature.returnTypeName &&
+        !statementsDefinitelyReturn(statement.body)
+    ) {
+        diagnostics.push({
+            position: statement.position,
+            message: `function '${signature.name}' may exit without returning a value`,
+        })
+    }
+}
+
+function statementsDefinitelyReturn(statements: Statement[]): boolean {
+    for (const statement of statements) {
+        if (statementDefinitelyReturns(statement)) {
+            return true
+        }
+    }
+
+    return false
+}
+
+function statementDefinitelyReturns(statement: Statement): boolean {
+    switch (statement.kind) {
+        case 'ReturnStatement':
+            return true
+        case 'IfStatement':
+            return (
+                statementsDefinitelyReturn(statement.thenStatements) &&
+                statementsDefinitelyReturn(statement.elseStatements)
+            )
+        default:
+            return false
+    }
 }
 
 function analyzeReturnStatement(
@@ -489,13 +523,28 @@ function analyzeReturnStatement(
         return
     }
 
-    inferExpressionValueSet(
+    const inferred = inferExpressionValueSet(
         statement.value,
         bindings,
         bindingStates,
         functionSignatures,
         diagnostics,
     )
+
+    if (!inferred) return
+
+    const declaredReturnValueSet = valueSetFromFunctionReturn(signature)
+    if (
+        declaredReturnValueSet &&
+        inferred.family !== 'never' &&
+        !isSubsetValueSet(inferred, declaredReturnValueSet)
+    ) {
+        diagnostics.push({
+            position: statement.position,
+            message: `returned value ${describeValueSet(inferred)} is not assignable to declared return type ${describeValueSet(declaredReturnValueSet)}`,
+        })
+        return
+    }
 
     const expressionSemantics = inferExpressionSemanticsClass(
         statement.value,
