@@ -1087,3 +1087,71 @@ describe('DATA-ANALYZE-002: context-typed literal enforcement', () => {
         )
     })
 })
+
+describe('DATA-ANALYZE-003/004: data literal field validation', () => {
+    it('accepts a context-typed data literal with all required compatible fields', () => {
+        const program = parseClawr(
+            [
+                'data Person { age: integer, alive: truthvalue in {false, true} }',
+                'const p: Person = { age: 42, alive: true }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+        expect(semanticProgram.bindings.get('p')).toEqual(
+            dataValueSet('Person'),
+        )
+    })
+
+    it('rejects missing required fields in a context-typed data literal', () => {
+        const program = parseClawr(
+            [
+                'data Person { age: integer, alive: truthvalue }',
+                'const p: Person = { age: 42 }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "missing required field 'alive' for data type 'Person'",
+        )
+    })
+
+    it('rejects unknown fields in a context-typed data literal', () => {
+        const program = parseClawr(
+            [
+                'data Person { age: integer }',
+                'const p: Person = { age: 42, extra: true }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "unknown field 'extra' for data type 'Person'",
+        )
+    })
+
+    it('rejects incompatible field values against declared field value-sets', () => {
+        const program = parseClawr(
+            [
+                'data Person { age: integer, alive: truthvalue in {false, true} }',
+                'const p: Person = { age: true, alive: ambiguous }',
+            ].join('\n'),
+            'test',
+        )
+
+        const messages = analyzeProgram(program).diagnostics.map(
+            (d) => d.message,
+        )
+        expect(messages).toContain(
+            "field 'age' value truthvalue[true] is not assignable to integer",
+        )
+        expect(messages).toContain(
+            "field 'alive' value truthvalue[ambiguous] is not assignable to truthvalue[false|true]",
+        )
+    })
+})

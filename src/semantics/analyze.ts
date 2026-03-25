@@ -1028,9 +1028,9 @@ function inferDeclarationBinding(
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): SemanticBinding | null {
-    // DATA-ANALYZE-002: data literals require a known target data type from annotation.
-    // When a data literal is paired with an annotation naming a registered data type,
-    // accept it early; field-level validation is handled by DATA-ANALYZE-003+.
+    // DATA-ANALYZE-002/003/004:
+    // Data literals are context-typed in V1. When an annotation names a registered
+    // data type, validate fields before materializing the nominal data value-set.
     if (
         statement.initializer.kind === 'DataLiteral' &&
         statement.typeAnnotation !== null &&
@@ -1039,6 +1039,53 @@ function inferDeclarationBinding(
         const typeName = statement.typeAnnotation.name
         const dataType = dataTypes.get(typeName)
         if (dataType) {
+            const fieldValidationDiagnosticsStart = diagnostics.length
+            const providedFieldNames = new Set<string>()
+
+            for (const field of statement.initializer.fields) {
+                providedFieldNames.add(field.name)
+
+                const targetField = dataType.fields.get(field.name)
+                if (!targetField) {
+                    diagnostics.push({
+                        position: field.position,
+                        message: `unknown field '${field.name}' for data type '${typeName}'`,
+                    })
+                    continue
+                }
+
+                const inferredFieldValue = inferExpressionValueSet(
+                    field.value,
+                    bindings,
+                    bindingStates,
+                    functionSignatures,
+                    diagnostics,
+                )
+                if (!inferredFieldValue) continue
+
+                if (
+                    !isSubsetValueSet(inferredFieldValue, targetField.valueSet)
+                ) {
+                    diagnostics.push({
+                        position: field.position,
+                        message: `field '${field.name}' value ${describeValueSet(inferredFieldValue)} is not assignable to ${describeValueSet(targetField.valueSet)}`,
+                    })
+                }
+            }
+
+            for (const requiredField of dataType.fields.values()) {
+                if (!providedFieldNames.has(requiredField.name)) {
+                    diagnostics.push({
+                        position: statement.initializer.position,
+                        message: `missing required field '${requiredField.name}' for data type '${typeName}'`,
+                    })
+                }
+            }
+
+            if (diagnostics.length > fieldValidationDiagnosticsStart) {
+                return null
+            }
+
             const vs = dataValueSet(typeName)
             return { semantics: statement.semantics, current: vs, allowed: vs }
         }
