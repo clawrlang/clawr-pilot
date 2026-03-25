@@ -3,12 +3,15 @@ import type {
     CallExpression,
     Expression,
     ExpressionStatement,
+    FunctionDeclaration,
     IfStatement,
     Program,
+    SourcePosition,
     VariableDeclaration,
 } from '../ast'
 import {
     type CExpression,
+    type CFunction,
     type CStatement,
     type CTranslationUnit,
 } from '../ir/c'
@@ -28,16 +31,42 @@ import {
     tritfieldPlaneName,
 } from './tritfield-lowering'
 
-export function lowerToCIr(program: Program): CTranslationUnit {
+interface ReturnNormalizationMarker {
+    functionName: string
+    position: SourcePosition
+}
+
+interface LowerToCIrOptions {
+    returnsRequiringNormalization?: ReturnNormalizationMarker[]
+}
+
+export function lowerToCIr(
+    program: Program,
+    options: LowerToCIrOptions = {},
+): CTranslationUnit {
     const mainStatements: CStatement[] = []
+    const loweredFunctions: CFunction[] = []
     const heapLocals: string[] = []
     const variableKinds = new Map<string, RuntimeType>()
     const mutationStrategies = new Map<string, MutationStrategy>()
     const tritfieldLengths = new Map<string, number>()
     const bitfieldLengths = new Map<string, number>()
+    const returnsRequiringNormalization =
+        options.returnsRequiringNormalization ?? []
     let tempCounter = 0
 
     for (const statement of program.statements) {
+        if (statement.kind === 'FunctionDeclaration') {
+            loweredFunctions.push(
+                lowerFunctionDeclaration(
+                    statement,
+                    returnsRequiringNormalization,
+                    () => `__clawr_tmp${tempCounter++}`,
+                ),
+            )
+            continue
+        }
+
         lowerStatement(
             statement,
             mainStatements,
@@ -135,6 +164,7 @@ export function lowerToCIr(program: Program): CTranslationUnit {
                     },
                 ],
             },
+            ...loweredFunctions,
             {
                 kind: 'CFunction',
                 returnType: 'int',
@@ -144,6 +174,205 @@ export function lowerToCIr(program: Program): CTranslationUnit {
             },
         ],
     }
+}
+
+function lowerFunctionDeclaration(
+    statement: FunctionDeclaration,
+    returnsRequiringNormalization: ReturnNormalizationMarker[],
+    nextTemp: () => string,
+): CFunction {
+    const returnType = cTypeForFunctionReturn(statement)
+    const variableKinds = new Map<string, RuntimeType>()
+    for (const parameter of statement.parameters) {
+        const kind = runtimeKindFromTypeName(parameter.typeName)
+        if (!kind) {
+            throw new Error(
+                `Function parameter '${parameter.name}' in '${statement.identifier.name}' requires a concrete supported type in this vertical slice`,
+            )
+        }
+        variableKinds.set(parameter.name, kind)
+    }
+
+    const statements: CStatement[] = []
+    for (const bodyStatement of statement.body) {
+        if (bodyStatement.kind !== 'ReturnStatement') {
+            throw new Error(
+                `Function '${statement.identifier.name}' lowering currently supports only direct return statements in this vertical slice`,
+            )
+        }
+
+        lowerReturnStatementInFunction(
+            bodyStatement,
+            statement,
+            statements,
+            variableKinds,
+            returnsRequiringNormalization,
+            nextTemp,
+        )
+    }
+
+    if (
+        statements.length === 0 ||
+        statements[statements.length - 1].kind !== 'CReturnStatement'
+    ) {
+        statements.push({ kind: 'CReturnStatement' })
+    }
+
+    return {
+        kind: 'CFunction',
+        returnType,
+        name: statement.identifier.name,
+        params: statement.parameters.map((parameter) => ({
+            type: cTypeForParameter(parameter.typeName),
+            name: parameter.name,
+        })),
+        statements,
+    }
+}
+
+function cTypeForFunctionReturn(statement: FunctionDeclaration): string {
+    if (!statement.returnSlot.typeName) return 'void'
+    return cTypeForParameter(statement.returnSlot.typeName)
+}
+
+function cTypeForParameter(typeName: string | null): string {
+    const runtimeKind = runtimeKindFromTypeName(typeName)
+    if (runtimeKind === 'integer') return 'Integer*'
+    if (runtimeKind === 'real') return 'Real*'
+    if (runtimeKind === 'truthvalue') return 'int'
+    if (runtimeKind === 'string') return 'String*'
+    throw new Error(
+        `Unsupported function type '${typeName ?? 'unknown'}' in this vertical slice`,
+    )
+}
+
+function runtimeKindFromTypeName(typeName: string | null): RuntimeType | null {
+    switch (typeName) {
+        case 'integer':
+            return 'integer'
+        case 'real':
+            return 'real'
+        case 'truthvalue':
+            return 'truthvalue'
+        case 'string':
+            return 'string'
+        default:
+            return null
+    }
+}
+
+function lowerReturnStatementInFunction(
+    statement: Extract<
+        Program['statements'][number],
+        { kind: 'ReturnStatement' }
+    >,
+    fn: FunctionDeclaration,
+    out: CStatement[],
+    variableKinds: Map<string, RuntimeType>,
+    returnsRequiringNormalization: ReturnNormalizationMarker[],
+    nextTemp: () => string,
+) {
+    if (!statement.value) {
+        out.push({ kind: 'CReturnStatement' })
+        return
+    }
+
+    if (isIntegerExpression(statement.value, variableKinds)) {
+        const lowered = lowerIntegerExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        out.push(...lowered.setup)
+
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource) {
+            out.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
+
+        const needsNormalization = returnsRequiringNormalization.some(
+            (marker) =>
+                marker.functionName === fn.identifier.name &&
+                isSamePosition(marker.position, statement.position),
+        )
+        if (needsNormalization && lowered.value.kind === 'CIdentifier') {
+            out.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'mutateRC',
+                    args: [{ kind: 'CIdentifier', name: lowered.value.name }],
+                },
+            })
+        }
+
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        releaseOwnedTemps(out, releaseTemps)
+        out.push({ kind: 'CReturnStatement', value: lowered.value })
+        return
+    }
+
+    if (isRealExpression(statement.value, variableKinds)) {
+        const lowered = lowerRealExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        out.push(...lowered.setup)
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource) {
+            out.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        releaseOwnedTemps(out, releaseTemps)
+        out.push({ kind: 'CReturnStatement', value: lowered.value })
+        return
+    }
+
+    if (isTruthExpression(statement.value, variableKinds)) {
+        const lowered = lowerTruthExpression(
+            statement.value,
+            variableKinds,
+            nextTemp,
+        )
+        out.push(...lowered.setup)
+        out.push({ kind: 'CReturnStatement', value: lowered.value })
+        return
+    }
+
+    throw new Error(
+        `Function return lowering supports only integer/real/truthvalue expressions in this vertical slice (function '${fn.identifier.name}')`,
+    )
+}
+
+function isSamePosition(a: SourcePosition, b: SourcePosition): boolean {
+    return (
+        a.file === b.file &&
+        a.line === b.line &&
+        a.column === b.column &&
+        a.endLine === b.endLine &&
+        a.endColumn === b.endColumn
+    )
 }
 
 function lowerStatement(

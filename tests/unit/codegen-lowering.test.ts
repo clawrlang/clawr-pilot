@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test'
+import type { Program } from '../../src/ast'
 import { parseClawr } from '../../src/parser'
 import { lowerToCIr } from '../../src/codegen'
 import type { CExpression, CStatement, CTranslationUnit } from '../../src/ir/c'
@@ -589,5 +590,62 @@ describe('codegen lowering behavior', () => {
 
         expect(serialized).toContain('bitfield__toStringRC')
         expect(serialized).toContain('4U')
+    })
+
+    it('lowers direct-return integer functions', () => {
+        const source = [
+            'func make() -> integer {',
+            '  return 1 + 2',
+            '}',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-func-return-int.clawr'))
+        const fn = ir.functions.find((candidate) => candidate.name === 'make')
+        expect(fn).toBeDefined()
+        expect(fn?.returnType).toBe('Integer*')
+
+        const serialized = JSON.stringify(fn)
+        expect(serialized).toContain('Integer¸add')
+        expect(serialized).toContain('CReturnStatement')
+    })
+
+    it('emits mutateRC for returns marked for conservative normalization', () => {
+        const source = [
+            'func maybeUnique(x: integer) -> integer {',
+            '  return x',
+            '}',
+            '',
+        ].join('\n')
+
+        const ast = parseClawr(
+            source,
+            'test-func-return-normalize.clawr',
+        ) as Program
+        const fnDecl = ast.statements[0]
+        if (fnDecl.kind !== 'FunctionDeclaration') {
+            throw new Error('Expected function declaration at top level')
+        }
+        const returnStmt = fnDecl.body[0]
+        if (returnStmt.kind !== 'ReturnStatement') {
+            throw new Error('Expected return statement in function body')
+        }
+
+        const ir = lowerToCIr(ast, {
+            returnsRequiringNormalization: [
+                {
+                    functionName: fnDecl.identifier.name,
+                    position: returnStmt.position,
+                },
+            ],
+        })
+        const fn = ir.functions.find(
+            (candidate) => candidate.name === 'maybeUnique',
+        )
+        expect(fn).toBeDefined()
+
+        const serialized = JSON.stringify(fn)
+        expect(serialized).toContain('mutateRC')
+        expect(serialized).toContain('retainRC')
     })
 })

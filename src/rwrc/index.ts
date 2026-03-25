@@ -47,7 +47,10 @@ async function buildCommand(sourceFile: string, outDir: string) {
             .join('\n')
         throw new Error(message)
     }
-    const loweredIr = lowerToCIr(ast)
+    const loweredIr = lowerToCIr(ast, {
+        returnsRequiringNormalization:
+            semanticProgram.returnsRequiringNormalization,
+    })
     const optimizedIr = optimizeCIr(loweredIr)
     const generatedC = emitC(optimizedIr)
 
