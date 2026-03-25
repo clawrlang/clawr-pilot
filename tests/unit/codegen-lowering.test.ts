@@ -648,4 +648,95 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('mutateRC')
         expect(serialized).toContain('retainRC')
     })
+
+    it('lowers if/else with local variable declarations in function', () => {
+        const source = [
+            'func conditional() -> integer {',
+            '  mut cond: truthvalue = true',
+            '  if (cond) {',
+            '    mut a: integer = 10',
+            '    return a',
+            '  } else {',
+            '    mut b: integer = 20',
+            '    return b',
+            '  }',
+            '}',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-func-if-else.clawr'))
+        const fn = ir.functions.find(
+            (candidate) => candidate.name === 'conditional',
+        )
+        expect(fn).toBeDefined()
+
+        const serialized = JSON.stringify(fn)
+        // Verify that we have CIfStatement
+        expect(serialized).toContain('CIfStatement')
+        // Verify variable declarations exist for both branches
+        expect(serialized).toContain('CVariableDeclaration')
+        // Verify returns in both branches
+        expect(serialized).toContain('CReturnStatement')
+    })
+
+    it('cleans up local variables before return in if branch', () => {
+        const source = [
+            'func checkValue() -> integer {',
+            '  mut cond: truthvalue = true',
+            '  if (cond) {',
+            '    mut local: integer = 5',
+            '    return local',
+            '  } else {',
+            '    return 0',
+            '  }',
+            '}',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(parseClawr(source, 'test-func-if-cleanup.clawr'))
+        const fn = ir.functions.find(
+            (candidate) => candidate.name === 'checkValue',
+        )
+        expect(fn).toBeDefined()
+
+        const serialized = JSON.stringify(fn)
+        // Verify that we have CIfStatement and return statements
+        expect(serialized).toContain('CIfStatement')
+        expect(serialized).toContain('CReturnStatement')
+        // Verify releaseRC calls are present for cleanup
+        expect(serialized).toContain('releaseRC')
+    })
+
+    it('handles multiple return statements with cleanup in if/else', () => {
+        const source = [
+            'func selectInteger() -> integer {',
+            '  mut cond: truthvalue = true',
+            '  if (cond) {',
+            '    mut a: integer = 1',
+            '    mut b: integer = 2',
+            '    return a',
+            '  } else {',
+            '    mut c: integer = 3',
+            '    return c',
+            '  }',
+            '}',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-func-multi-return.clawr'),
+        )
+        const fn = ir.functions.find(
+            (candidate) => candidate.name === 'selectInteger',
+        )
+        expect(fn).toBeDefined()
+
+        const serialized = JSON.stringify(fn)
+        // Both branches should have returns and if/else structure
+        expect(serialized).toContain('CIfStatement')
+        expect(serialized).toContain('CReturnStatement')
+        // Multiple return statements should be present (one per branch + optional default)
+        const returnMatches = serialized.match(/CReturnStatement/g)
+        expect(returnMatches?.length).toBeGreaterThanOrEqual(2)
+    })
 })

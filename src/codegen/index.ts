@@ -194,21 +194,36 @@ function lowerFunctionDeclaration(
     }
 
     const statements: CStatement[] = []
-    for (const bodyStatement of statement.body) {
-        if (bodyStatement.kind !== 'ReturnStatement') {
-            throw new Error(
-                `Function '${statement.identifier.name}' lowering currently supports only direct return statements in this vertical slice`,
-            )
-        }
+    const heapLocals: string[] = []
+    const mutationStrategies = new Map<string, MutationStrategy>()
+    const tritfieldLengths = new Map<string, number>()
+    const bitfieldLengths = new Map<string, number>()
 
-        lowerReturnStatementInFunction(
+    for (const bodyStatement of statement.body) {
+        lowerStatementInFunctionBody(
             bodyStatement,
             statement,
             statements,
+            heapLocals,
             variableKinds,
+            mutationStrategies,
+            tritfieldLengths,
+            bitfieldLengths,
             returnsRequiringNormalization,
             nextTemp,
         )
+    }
+
+    // Cleanup function-scope heap locals before function exit
+    for (const local of [...heapLocals].reverse()) {
+        statements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
     }
 
     if (
@@ -261,6 +276,184 @@ function runtimeKindFromTypeName(typeName: string | null): RuntimeType | null {
     }
 }
 
+function lowerStatementInFunctionBody(
+    statement: Program['statements'][number],
+    fn: FunctionDeclaration,
+    statements: CStatement[],
+    heapLocals: string[],
+    variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
+    tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
+    returnsRequiringNormalization: ReturnNormalizationMarker[],
+    nextTemp: () => string,
+) {
+    if (statement.kind === 'SubsetDeclaration') {
+        return
+    }
+
+    if (statement.kind === 'FunctionDeclaration') {
+        return
+    }
+
+    if (statement.kind === 'ReturnStatement') {
+        lowerReturnStatementInFunction(
+            statement,
+            fn,
+            statements,
+            heapLocals,
+            variableKinds,
+            returnsRequiringNormalization,
+            nextTemp,
+        )
+        return
+    }
+
+    if (statement.kind === 'IfStatement') {
+        lowerIfStatementInFunctionBody(
+            statement,
+            fn,
+            statements,
+            heapLocals,
+            variableKinds,
+            mutationStrategies,
+            tritfieldLengths,
+            bitfieldLengths,
+            returnsRequiringNormalization,
+            nextTemp,
+        )
+        return
+    }
+
+    if (statement.kind === 'VariableDeclaration') {
+        lowerVariableDeclaration(
+            statement,
+            statements,
+            heapLocals,
+            variableKinds,
+            mutationStrategies,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
+
+    if (statement.kind === 'AssignmentStatement') {
+        lowerAssignmentStatement(
+            statement,
+            statements,
+            variableKinds,
+            mutationStrategies,
+            tritfieldLengths,
+            bitfieldLengths,
+            nextTemp,
+        )
+        return
+    }
+
+    lowerExpressionStatement(
+        statement,
+        statements,
+        variableKinds,
+        tritfieldLengths,
+        bitfieldLengths,
+        nextTemp,
+    )
+}
+
+function lowerIfStatementInFunctionBody(
+    statement: IfStatement,
+    fn: FunctionDeclaration,
+    statements: CStatement[],
+    heapLocals: string[],
+    variableKinds: Map<string, RuntimeType>,
+    mutationStrategies: Map<string, MutationStrategy>,
+    tritfieldLengths: Map<string, number>,
+    bitfieldLengths: Map<string, number>,
+    returnsRequiringNormalization: ReturnNormalizationMarker[],
+    nextTemp: () => string,
+) {
+    const loweredPredicate = lowerTruthExpression(
+        statement.predicate,
+        variableKinds,
+        nextTemp,
+    )
+
+    const thenStatements: CStatement[] = []
+    const thenHeapLocals: string[] = []
+    const thenKinds = new Map(variableKinds)
+    const thenMutationStrategies = new Map(mutationStrategies)
+    const thenTritfieldLengths = new Map(tritfieldLengths)
+    const thenBitfieldLengths = new Map(bitfieldLengths)
+    for (const nested of statement.thenStatements) {
+        lowerStatementInFunctionBody(
+            nested,
+            fn,
+            thenStatements,
+            thenHeapLocals,
+            thenKinds,
+            thenMutationStrategies,
+            thenTritfieldLengths,
+            thenBitfieldLengths,
+            returnsRequiringNormalization,
+            nextTemp,
+        )
+    }
+    for (const local of [...thenHeapLocals].reverse()) {
+        thenStatements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
+    }
+
+    const elseStatements: CStatement[] = []
+    const elseHeapLocals: string[] = []
+    const elseKinds = new Map(variableKinds)
+    const elseMutationStrategies = new Map(mutationStrategies)
+    const elseTritfieldLengths = new Map(tritfieldLengths)
+    const elseBitfieldLengths = new Map(bitfieldLengths)
+    for (const nested of statement.elseStatements) {
+        lowerStatementInFunctionBody(
+            nested,
+            fn,
+            elseStatements,
+            elseHeapLocals,
+            elseKinds,
+            elseMutationStrategies,
+            elseTritfieldLengths,
+            elseBitfieldLengths,
+            returnsRequiringNormalization,
+            nextTemp,
+        )
+    }
+    for (const local of [...elseHeapLocals].reverse()) {
+        elseStatements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
+    }
+
+    statements.push(...loweredPredicate.setup)
+    statements.push({
+        kind: 'CIfStatement',
+        condition: {
+            kind: 'CRawExpression',
+            code: `(${cTruthValue('true')} == ${cExprCode(loweredPredicate.value)})`,
+        },
+        thenStatements,
+        elseStatements,
+    })
+}
+
 function lowerReturnStatementInFunction(
     statement: Extract<
         Program['statements'][number],
@@ -268,10 +461,23 @@ function lowerReturnStatementInFunction(
     >,
     fn: FunctionDeclaration,
     out: CStatement[],
+    heapLocals: string[],
     variableKinds: Map<string, RuntimeType>,
     returnsRequiringNormalization: ReturnNormalizationMarker[],
     nextTemp: () => string,
 ) {
+    // Cleanup local heap variables before return
+    for (const local of [...heapLocals].reverse()) {
+        out.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: local }],
+            },
+        })
+    }
+
     if (!statement.value) {
         out.push({ kind: 'CReturnStatement' })
         return
