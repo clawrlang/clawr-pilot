@@ -382,6 +382,32 @@ describe('codegen lowering behavior', () => {
         expect(hasCallWithIdentifierArg(trace, 'releaseRC', 'i')).toBe(true)
     })
 
+    it('releases discarded integer expression temporaries exactly once', () => {
+        const source = ['1 + 2', ''].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-discarded-int-expression.clawr'),
+        )
+        const trace = collectMainCallTrace(ir)
+
+        // Discarding 1 + 2 creates three owned integer temporaries (1, 2, sum)
+        // which must each be released exactly once.
+        expect(countCalls(trace, 'retainRC')).toBe(0)
+        expect(countCalls(trace, 'releaseRC')).toBe(3)
+    })
+
+    it('releases discarded real expression temporaries exactly once', () => {
+        const source = ['1.5 + 2.5', ''].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-discarded-real-expression.clawr'),
+        )
+        const trace = collectMainCallTrace(ir)
+
+        expect(countCalls(trace, 'retainRC')).toBe(0)
+        expect(countCalls(trace, 'releaseRC')).toBe(3)
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

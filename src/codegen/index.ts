@@ -899,19 +899,64 @@ function lowerExpressionStatement(
     nextTemp: () => string,
 ) {
     const expr = statement.expression
-    if (expr.kind !== 'CallExpression') {
-        throw new Error(
-            'Only call expressions are supported as statement expressions',
-        )
+    if (expr.kind === 'CallExpression') {
+        if (expr.callee.kind === 'Identifier' && expr.callee.name === 'print') {
+            lowerPrintCall(
+                expr,
+                statements,
+                variableKinds,
+                tritfieldLengths,
+                bitfieldLengths,
+                nextTemp,
+            )
+            return
+        }
     }
 
-    lowerPrintCall(
-        expr,
-        statements,
-        variableKinds,
-        tritfieldLengths,
-        bitfieldLengths,
-        nextTemp,
+    if (isIntegerExpression(expr, variableKinds)) {
+        const lowered = lowerIntegerExpression(expr, variableKinds, nextTemp)
+        statements.push(...lowered.setup)
+        releaseOwnedTemps(statements, lowered.heapTemps)
+        return
+    }
+
+    if (isRealExpression(expr, variableKinds)) {
+        const lowered = lowerRealExpression(expr, variableKinds, nextTemp)
+        statements.push(...lowered.setup)
+        releaseOwnedTemps(statements, lowered.heapTemps)
+        return
+    }
+
+    if (isTruthExpression(expr, variableKinds)) {
+        const lowered = lowerTruthExpression(expr, variableKinds, nextTemp)
+        statements.push(...lowered.setup)
+        return
+    }
+
+    if (isBitfieldExpression(expr, variableKinds)) {
+        const lowered = lowerBitfieldExpression(
+            expr,
+            variableKinds,
+            bitfieldLengths,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        return
+    }
+
+    if (isTritfieldExpression(expr, variableKinds)) {
+        const lowered = lowerTritfieldExpression(
+            expr,
+            variableKinds,
+            tritfieldLengths,
+            nextTemp,
+        )
+        statements.push(...lowered.setup)
+        return
+    }
+
+    throw new Error(
+        'Only print(...) calls and supported value expressions are allowed as statement expressions in this vertical slice',
     )
 }
 
