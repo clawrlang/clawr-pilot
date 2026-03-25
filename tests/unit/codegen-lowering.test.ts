@@ -259,6 +259,41 @@ describe('codegen lowering behavior', () => {
         expect(serialized).toContain('releaseRC')
     })
 
+    it('retains borrowed integer aliases on declaration and assignment', () => {
+        const source = [
+            'const a = 1',
+            'const b = a',
+            'mut c = 2',
+            'c = b',
+            'print(c.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-borrowed-int-alias.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).toContain('retainRC')
+    })
+
+    it('moves temporary integer values without retain on assignment', () => {
+        const source = [
+            'mut i = 1',
+            'i = 2 + 3',
+            'print(i.toString())',
+            '',
+        ].join('\n')
+
+        const ir = lowerToCIr(
+            parseClawr(source, 'test-int-temporary-move.clawr'),
+        )
+        const serialized = JSON.stringify(ir)
+
+        expect(serialized).not.toContain('retainRC')
+        expect(serialized).toContain('releaseRC')
+    })
+
     it('lowers integer binary operators to Integer runtime calls', () => {
         const source = [
             'const a = 10',

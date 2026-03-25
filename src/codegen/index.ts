@@ -266,6 +266,25 @@ function lowerAssignmentStatement(
             nextTemp,
         )
         statements.push(...lowered.setup)
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource && borrowedSource === statement.target.name) {
+            releaseOwnedTemps(statements, releaseTemps)
+            return
+        }
+        if (borrowedSource) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
         lowerMutationPreparation(
             statement.target.name,
             statements,
@@ -284,17 +303,7 @@ function lowerAssignmentStatement(
             target: { kind: 'CIdentifier', name: statement.target.name },
             value: lowered.value,
         })
-        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
-        for (const temp of releaseTemps) {
-            statements.push({
-                kind: 'CExpressionStatement',
-                expression: {
-                    kind: 'CCallExpression',
-                    callee: 'releaseRC',
-                    args: [{ kind: 'CIdentifier', name: temp }],
-                },
-            })
-        }
+        releaseOwnedTemps(statements, releaseTemps)
         return
     }
 
@@ -308,6 +317,25 @@ function lowerAssignmentStatement(
             nextTemp,
         )
         statements.push(...lowered.setup)
+        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource && borrowedSource === statement.target.name) {
+            releaseOwnedTemps(statements, releaseTemps)
+            return
+        }
+        if (borrowedSource) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
         lowerMutationPreparation(
             statement.target.name,
             statements,
@@ -326,17 +354,7 @@ function lowerAssignmentStatement(
             target: { kind: 'CIdentifier', name: statement.target.name },
             value: lowered.value,
         })
-        const releaseTemps = detachOwnedValue(lowered.value, lowered.heapTemps)
-        for (const temp of releaseTemps) {
-            statements.push({
-                kind: 'CExpressionStatement',
-                expression: {
-                    kind: 'CCallExpression',
-                    callee: 'releaseRC',
-                    args: [{ kind: 'CIdentifier', name: temp }],
-                },
-            })
-        }
+        releaseOwnedTemps(statements, releaseTemps)
         return
     }
 
@@ -627,13 +645,27 @@ function lowerVariableDeclaration(
             lowered.value,
             lowered.heapTemps,
         )
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
         statements.push({
             kind: 'CVariableDeclaration',
             type: 'Integer*',
             name: statement.identifier.name,
             initializer: lowered.value,
         })
-        heapLocals.push(...detachedHeapTemps)
+        releaseOwnedTemps(statements, detachedHeapTemps)
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'integer')
         mutationStrategies.set(
@@ -710,13 +742,27 @@ function lowerVariableDeclaration(
             lowered.value,
             lowered.heapTemps,
         )
+        const borrowedSource = borrowedIdentifierValue(
+            lowered.value,
+            lowered.heapTemps,
+        )
+        if (borrowedSource) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'retainRC',
+                    args: [{ kind: 'CIdentifier', name: borrowedSource }],
+                },
+            })
+        }
         statements.push({
             kind: 'CVariableDeclaration',
             type: 'Real*',
             name: statement.identifier.name,
             initializer: lowered.value,
         })
-        heapLocals.push(...detachedHeapTemps)
+        releaseOwnedTemps(statements, detachedHeapTemps)
         heapLocals.push(statement.identifier.name)
         variableKinds.set(statement.identifier.name, 'real')
         mutationStrategies.set(
@@ -872,6 +918,27 @@ function lowerExpressionStatement(
 function detachOwnedValue(value: CExpression, heapTemps: string[]) {
     if (value.kind !== 'CIdentifier') return heapTemps
     return heapTemps.filter((name) => name !== value.name)
+}
+
+function borrowedIdentifierValue(
+    value: CExpression,
+    heapTemps: string[],
+): string | null {
+    if (value.kind !== 'CIdentifier') return null
+    return heapTemps.includes(value.name) ? null : value.name
+}
+
+function releaseOwnedTemps(statements: CStatement[], temps: string[]) {
+    for (const temp of temps) {
+        statements.push({
+            kind: 'CExpressionStatement',
+            expression: {
+                kind: 'CCallExpression',
+                callee: 'releaseRC',
+                args: [{ kind: 'CIdentifier', name: temp }],
+            },
+        })
+    }
 }
 
 function lowerMutationPreparation(
