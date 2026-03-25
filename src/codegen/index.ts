@@ -1039,8 +1039,8 @@ function lowerVariableDeclaration(
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
-    const fieldAnnotation =
-        statement.typeAnnotation && statement.typeAnnotation.kind === 'field'
+    const laneAnnotation =
+        statement.typeAnnotation && statement.typeAnnotation.kind === 'lane'
             ? statement.typeAnnotation
             : null
 
@@ -1239,14 +1239,14 @@ function lowerVariableDeclaration(
             bitfieldLengths,
             nextTemp,
         )
-        if (fieldAnnotation && fieldAnnotation.baseName !== 'bitfield') {
+        if (laneAnnotation && laneAnnotation.baseName !== 'binarylane') {
             throw new Error(
-                `Variable ${statement.identifier.name} is declared as tritfield[${fieldAnnotation.length}] but initialized with a bitfield expression`,
+                `Variable ${statement.identifier.name} is declared as ternarylane[${laneAnnotation.length}] but initialized with a binarylane expression`,
             )
         }
-        if (fieldAnnotation && fieldAnnotation.length !== lowered.length) {
+        if (laneAnnotation && laneAnnotation.length !== lowered.length) {
             throw new Error(
-                `bitfield length mismatch for ${statement.identifier.name}: declared ${fieldAnnotation.length}, got ${lowered.length}`,
+                `binarylane length mismatch for ${statement.identifier.name}: declared ${laneAnnotation.length}, got ${lowered.length}`,
             )
         }
         statements.push(...lowered.setup)
@@ -1259,7 +1259,7 @@ function lowerVariableDeclaration(
         variableKinds.set(statement.identifier.name, 'bitfield')
         bitfieldLengths.set(
             statement.identifier.name,
-            fieldAnnotation?.length ?? lowered.length,
+            laneAnnotation?.length ?? lowered.length,
         )
         return
     }
@@ -1271,14 +1271,14 @@ function lowerVariableDeclaration(
             tritfieldLengths,
             nextTemp,
         )
-        if (fieldAnnotation && fieldAnnotation.baseName !== 'tritfield') {
+        if (laneAnnotation && laneAnnotation.baseName !== 'ternarylane') {
             throw new Error(
-                `Variable ${statement.identifier.name} is declared as bitfield[${fieldAnnotation.length}] but initialized with a tritfield expression`,
+                `Variable ${statement.identifier.name} is declared as binarylane[${laneAnnotation.length}] but initialized with a ternarylane expression`,
             )
         }
-        if (fieldAnnotation && fieldAnnotation.length !== lowered.length) {
+        if (laneAnnotation && laneAnnotation.length !== lowered.length) {
             throw new Error(
-                `tritfield length mismatch for ${statement.identifier.name}: declared ${fieldAnnotation.length}, got ${lowered.length}`,
+                `ternarylane length mismatch for ${statement.identifier.name}: declared ${laneAnnotation.length}, got ${lowered.length}`,
             )
         }
         statements.push(...lowered.setup)
@@ -1297,14 +1297,14 @@ function lowerVariableDeclaration(
         variableKinds.set(statement.identifier.name, 'tritfield')
         tritfieldLengths.set(
             statement.identifier.name,
-            fieldAnnotation?.length ?? lowered.length,
+            laneAnnotation?.length ?? lowered.length,
         )
         return
     }
 
-    if (fieldAnnotation) {
+    if (laneAnnotation) {
         throw new Error(
-            `Type annotation ${fieldAnnotation.baseName}[${fieldAnnotation.length}] requires a matching field initializer in this vertical slice`,
+            `Type annotation ${laneAnnotation.baseName}[${laneAnnotation.length}] requires a matching lane initializer in this vertical slice`,
         )
     }
 

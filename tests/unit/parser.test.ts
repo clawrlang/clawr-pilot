@@ -408,12 +408,12 @@ describe('parser subset declarations', () => {
     })
 })
 
-describe('parser field type annotations', () => {
-    it('parses bitfield and tritfield type annotations', () => {
+describe('parser lane type annotations', () => {
+    it('parses binarylane and ternarylane type annotations', () => {
         const program = parseClawr(
             [
-                'const a: bitfield[4] = bitfield("1010")',
-                'const b: tritfield[3] = tritfield("0?1")',
+                'const a: binarylane[4] = bitfield("1010")',
+                'const b: ternarylane[3] = tritfield("0?1")',
             ].join('\n'),
             'test',
         )
@@ -421,17 +421,44 @@ describe('parser field type annotations', () => {
         expect(program.statements[0]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
-                kind: 'field',
-                baseName: 'bitfield',
+                kind: 'lane',
+                baseName: 'binarylane',
                 length: 4,
             },
         })
         expect(program.statements[1]).toMatchObject({
             kind: 'VariableDeclaration',
             typeAnnotation: {
-                kind: 'field',
-                baseName: 'tritfield',
+                kind: 'lane',
+                baseName: 'ternarylane',
                 length: 3,
+            },
+        })
+    })
+
+    it('accepts bitfield/tritfield as temporary aliases', () => {
+        const program = parseClawr(
+            [
+                'const a: bitfield[5] = bitfield("10101")',
+                'const b: tritfield[2] = tritfield("0?")',
+            ].join('\n'),
+            'test',
+        )
+
+        expect(program.statements[0]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'lane',
+                baseName: 'binarylane',
+                length: 5,
+            },
+        })
+        expect(program.statements[1]).toMatchObject({
+            kind: 'VariableDeclaration',
+            typeAnnotation: {
+                kind: 'lane',
+                baseName: 'ternarylane',
+                length: 2,
             },
         })
     })
@@ -638,7 +665,7 @@ describe('parser field type annotations', () => {
     it('rejects out-of-range field lengths', () => {
         expect(() =>
             parseClawr('const x: bitfield[0] = bitfield("1")', 'test'),
-        ).toThrow(/Field type annotation length must be in \[1, 64\]/)
+        ).toThrow(/Lane type annotation length must be in \[1, 64\]/)
     })
 })
 

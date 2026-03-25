@@ -13,9 +13,9 @@ export interface SourcePosition {
 
 export type VariableSemantics = 'const' | 'mut' | 'ref'
 
-export interface FieldTypeAnnotation {
-    kind: 'field'
-    baseName: 'bitfield' | 'tritfield'
+export interface LaneTypeAnnotation {
+    kind: 'lane'
+    baseName: 'binarylane' | 'ternarylane'
     length: number
 }
 
@@ -58,7 +58,7 @@ export interface SubsetAliasTypeAnnotation {
 }
 
 export type TypeAnnotation =
-    | FieldTypeAnnotation
+    | LaneTypeAnnotation
     | ValueSetTypeAnnotation
     | SubsetAliasTypeAnnotation
 

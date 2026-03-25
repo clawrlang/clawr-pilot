@@ -64,6 +64,8 @@
 - Optimisation of `mutateRC()` calls (prune provably-unique call sites)
 - Allow `=> expression` shorthand instead of block body in function declarations
   - Enables inferring returned value-set from expression
+- `bitfield` and `tritfield` renamed to `binarylane` and `ternarylane`.
+- Are `tritfield` planes conducive to large data streams? or should they be joined into one `struct` with two fields?
 
 ## New additions
 

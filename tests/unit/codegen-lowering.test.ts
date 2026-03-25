@@ -528,7 +528,7 @@ describe('codegen lowering behavior', () => {
         )
 
         expect(() => lowerToCIr(ast)).toThrow(
-            /bitfield length mismatch for a: declared 5, got 4/,
+            /binarylane length mismatch for a: declared 5, got 4/,
         )
     })
 

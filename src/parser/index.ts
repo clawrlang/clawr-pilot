@@ -1104,10 +1104,12 @@ export class Parser {
     parseTypeAnnotation(): TypeAnnotation {
         const typeToken = this.stream.expect('IDENTIFIER')
         if (
+            typeToken.identifier === 'binarylane' ||
+            typeToken.identifier === 'ternarylane' ||
             typeToken.identifier === 'bitfield' ||
             typeToken.identifier === 'tritfield'
         ) {
-            return this.parseFieldTypeAnnotation(typeToken)
+            return this.parseLaneTypeAnnotation(typeToken)
         }
 
         if (
@@ -1215,17 +1217,20 @@ export class Parser {
         )
     }
 
-    parseFieldTypeAnnotation(
+    parseLaneTypeAnnotation(
         typeToken: Token & { kind: 'IDENTIFIER' },
     ): TypeAnnotation {
-        if (
-            typeToken.identifier !== 'bitfield' &&
-            typeToken.identifier !== 'tritfield'
-        ) {
+        const isLaneFamily =
+            typeToken.identifier === 'binarylane' ||
+            typeToken.identifier === 'ternarylane'
+        const isLegacyAlias =
+            typeToken.identifier === 'bitfield' ||
+            typeToken.identifier === 'tritfield'
+        if (!isLaneFamily && !isLegacyAlias) {
             throw parseError(
                 this.file,
                 typeToken,
-                'Only bitfield[N] and tritfield[N] type annotations are supported in this vertical slice',
+                'Only binarylane[N] and ternarylane[N] type annotations are supported in this vertical slice (bitfield/tritfield are temporary aliases)',
             )
         }
 
@@ -1244,13 +1249,22 @@ export class Parser {
             throw parseError(
                 this.file,
                 lengthToken,
-                'Field type annotation length must be in [1, 64]',
+                'Lane type annotation length must be in [1, 64]',
             )
         }
 
+        const normalizedBaseName: 'binarylane' | 'ternarylane' =
+            typeToken.identifier === 'bitfield'
+                ? 'binarylane'
+                : typeToken.identifier === 'tritfield'
+                  ? 'ternarylane'
+                  : typeToken.identifier === 'binarylane'
+                    ? 'binarylane'
+                    : 'ternarylane'
+
         return {
-            kind: 'field',
-            baseName: typeToken.identifier,
+            kind: 'lane',
+            baseName: normalizedBaseName,
             length: Number(lengthToken.value),
         }
     }

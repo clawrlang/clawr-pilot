@@ -1199,7 +1199,7 @@ function inferBinaryValueSet(
             }
             diagnostics.push({
                 position: expression.position,
-                message: `operator '${expression.operator}' requires matching bitfield or tritfield operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
+                message: `operator '${expression.operator}' requires matching binarylane or ternarylane operands, got ${describeValueSet(left)} and ${describeValueSet(right)}`,
             })
             return null
         case '&&':
@@ -1396,7 +1396,7 @@ function validateTypeAnnotationCompatibility(
         ) {
             diagnostics.push({
                 position,
-                message: `type annotation bitfield[${annotated.length}] is incompatible with bitfield[${inferred.length}] initializer`,
+                message: `type annotation binarylane[${annotated.length}] is incompatible with binarylane[${inferred.length}] initializer`,
             })
             return false
         }
@@ -1410,7 +1410,7 @@ function validateTypeAnnotationCompatibility(
         ) {
             diagnostics.push({
                 position,
-                message: `type annotation tritfield[${annotated.length}] is incompatible with tritfield[${inferred.length}] initializer`,
+                message: `type annotation ternarylane[${annotated.length}] is incompatible with ternarylane[${inferred.length}] initializer`,
             })
             return false
         }
@@ -1431,13 +1431,13 @@ function describeValueSet(valueSet: ValueSet): string {
     if (valueSet.family === 'never') return 'never'
     if (valueSet.family === 'bitfield') {
         return valueSet.length === null
-            ? 'bitfield'
-            : `bitfield[${valueSet.length}]`
+            ? 'binarylane'
+            : `binarylane[${valueSet.length}]`
     }
     if (valueSet.family === 'tritfield') {
         return valueSet.length === null
-            ? 'tritfield'
-            : `tritfield[${valueSet.length}]`
+            ? 'ternarylane'
+            : `ternarylane[${valueSet.length}]`
     }
     if (valueSet.family === 'integer') {
         if (valueSet.form === 'top') return 'integer'
@@ -1606,8 +1606,8 @@ function allowedValueSetFromTypeAnnotation(
     position: SourcePosition,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet {
-    if (typeAnnotation.kind === 'field') {
-        if (typeAnnotation.baseName === 'bitfield') {
+    if (typeAnnotation.kind === 'lane') {
+        if (typeAnnotation.baseName === 'binarylane') {
             return bitfieldSet(typeAnnotation.length)
         }
         return tritfieldSet(typeAnnotation.length)

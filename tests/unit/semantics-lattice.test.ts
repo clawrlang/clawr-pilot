@@ -515,8 +515,8 @@ describe('semantic scaffold', () => {
         ).toEqual([
             "operator '!' requires truthvalue operand, got integer[1]",
             "operator '&&' requires truthvalue operands, got integer[1] and truthvalue[true]",
-            "operator '&' requires matching bitfield or tritfield operands, got bitfield[3] and integer[1]",
-            "operator '<' requires matching integer or real operands, got bitfield[3] and integer[1]",
+            "operator '&' requires matching binarylane or ternarylane operands, got binarylane[3] and integer[1]",
+            "operator '<' requires matching integer or real operands, got binarylane[3] and integer[1]",
             'if predicate must be truthvalue, got integer[1]',
             "unknown identifier 'missingName'",
         ])
