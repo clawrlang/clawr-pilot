@@ -8,6 +8,8 @@ import type {
     CallExpression,
     DataDeclaration,
     DataFieldDeclaration,
+    DataLiteralExpression,
+    DataLiteralField,
     Expression,
     ExpressionStatement,
     FunctionDeclaration,
@@ -439,26 +441,40 @@ export class Parser {
                 typeAnnotation,
             })
 
+            const fieldEndLine = this.lastTokenLine()
             next = this.stream.peek()
             if (!next) throw new Error('Unexpected EOF in data declaration')
 
-            if (next.kind === 'PUNCTUATION' && next.symbol === ',') {
+            let consumedSeparator = false
+            while (
+                next &&
+                (next.kind === 'NEWLINE' ||
+                    (next.kind === 'PUNCTUATION' && next.symbol === ','))
+            ) {
                 this.stream.next()
+                consumedSeparator = true
                 next = this.stream.peek()
-                while (next && next.kind === 'NEWLINE') {
-                    this.stream.next()
-                    next = this.stream.peek()
-                }
-                if (!next) throw new Error('Unexpected EOF in data declaration')
-                continue
             }
-
-            if (next.kind === 'NEWLINE') {
-                continue
-            }
+            if (!next) throw new Error('Unexpected EOF in data declaration')
 
             if (next.kind === 'PUNCTUATION' && next.symbol === '}') {
                 break
+            }
+
+            if (next.kind === 'IDENTIFIER') {
+                if (consumedSeparator) {
+                    continue
+                }
+
+                if (next.line > fieldEndLine) {
+                    continue
+                }
+
+                throw parseError(
+                    this.file,
+                    next,
+                    'Expected , or } in data field list',
+                )
             }
 
             throw parseError(
@@ -1717,6 +1733,10 @@ export class Parser {
             } satisfies StringLiteralExpression
         }
 
+        if (token.kind === 'PUNCTUATION' && token.symbol === '{') {
+            return this.parseDataLiteral(token)
+        }
+
         throw parseError(
             this.file,
             token,
@@ -1760,6 +1780,93 @@ export class Parser {
             operator: '-',
             operand,
         } satisfies UnaryExpression
+    }
+
+    parseDataLiteral(openBraceToken: Token): DataLiteralExpression {
+        const fields: DataLiteralField[] = []
+        let closeBraceToken: Token | null = null
+
+        let next = this.stream.peek()
+        if (!next) throw new Error('Unexpected EOF in data literal')
+
+        while (next && !(next.kind === 'PUNCTUATION' && next.symbol === '}')) {
+            while (next && next.kind === 'NEWLINE') {
+                this.stream.next()
+                next = this.stream.peek()
+            }
+            if (!next) throw new Error('Unexpected EOF in data literal')
+            if (next.kind === 'PUNCTUATION' && next.symbol === '}') break
+
+            const fieldNameToken = this.stream.expect('IDENTIFIER')
+            this.stream.expect('PUNCTUATION', ':')
+            const value = this.parseExpression()
+
+            const fieldPosition = this.mergePositions(
+                this.positionFromToken(fieldNameToken),
+                value.position,
+            )
+
+            fields.push({
+                position: fieldPosition,
+                name: fieldNameToken.identifier,
+                value,
+            })
+
+            const fieldEndLine = this.lastTokenLine()
+            next = this.stream.peek()
+            if (!next) throw new Error('Unexpected EOF in data literal')
+
+            let consumedSeparator = false
+            while (
+                next &&
+                (next.kind === 'NEWLINE' ||
+                    (next.kind === 'PUNCTUATION' && next.symbol === ','))
+            ) {
+                this.stream.next()
+                consumedSeparator = true
+                next = this.stream.peek()
+            }
+            if (!next) throw new Error('Unexpected EOF in data literal')
+
+            if (next.kind === 'PUNCTUATION' && next.symbol === '}') {
+                continue
+            }
+
+            if (next.kind === 'IDENTIFIER') {
+                if (consumedSeparator) {
+                    continue
+                }
+
+                if (next.line > fieldEndLine) {
+                    continue
+                }
+
+                throw parseError(
+                    this.file,
+                    next,
+                    'Expected , or } in data literal field list',
+                )
+            }
+
+            if (next.kind !== 'PUNCTUATION' || next.symbol !== '}') {
+                throw parseError(
+                    this.file,
+                    next,
+                    'Expected , or } in data literal field list',
+                )
+            }
+        }
+
+        closeBraceToken = this.stream.expect('PUNCTUATION', '}')
+
+        return {
+            kind: 'DataLiteral',
+            position: this.mergePositions(
+                this.positionFromToken(openBraceToken),
+                this.positionFromToken(closeBraceToken),
+            ),
+            fields,
+        } satisfies DataLiteralExpression
     }
 
     parseCallExpression(callee: Expression): CallExpression {

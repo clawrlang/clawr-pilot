@@ -216,6 +216,7 @@ export type Expression =
     | BinaryExpression
     | MemberExpression
     | CallExpression
+    | DataLiteralExpression
 
 export interface IdentifierExpression {
     kind: 'Identifier'
@@ -294,4 +295,16 @@ export interface CallExpression {
     position: SourcePosition
     callee: Expression
     arguments: CallArgument[]
+}
+
+export interface DataLiteralField {
+    position: SourcePosition
+    name: string
+    value: Expression
+}
+
+export interface DataLiteralExpression {
+    kind: 'DataLiteral'
+    position: SourcePosition
+    fields: DataLiteralField[]
 }

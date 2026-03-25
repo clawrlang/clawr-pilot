@@ -1072,7 +1072,11 @@ function inferExpressionValueSet(
             )
         case 'MemberExpression':
             return null
+        case 'DataLiteral':
+        // Data literals require context typing; return null for now
+        // Semantic validation will happen in DATA-ANALYZE-002+
     }
+    return null
 }
 
 function inferUnaryValueSet(
