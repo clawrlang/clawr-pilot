@@ -1,8 +1,7 @@
 # TODO
 
 - Milestone focus (near-term)
-  - Parser-rewrite milestone path: prioritize runtime and language completeness over advanced analysis.
-  - Complete integer division in runtime (`Integer¸divide` full multi-digit divisor support).
+  - Prioritize runtime and language completeness over advanced analysis.
   - Keep subset constraints enforcing compile-time assignment compatibility.
   - Defer advanced lattice/control-flow narrowing until more core types exist (`data`/`object`/`service`/`enum`/`union`).
 
@@ -12,11 +11,11 @@
   - Future static code-path analysis and narrowing by control flow/path conditions.
   - Future optimization hook: fold pure expressions when analysis proves a single possible value.
 
-- Control-flow narrowing V1 (after integer division; truthvalue-first)
-  - Start with branch-local truthvalue narrowing in `if`/`else`.
+- Control-flow narrowing V1
   - Extend to subset-aware assignment checks inside guarded branches (e.g. `if (x < 5) { y = x }`).
   - Join branch states conservatively at merge points.
   - Add diagnostics for impossible branches/contradictory predicates only where semantics are already precise.
+
 - `data`, `object` and `service` types
   - Heap allocated and reference counted
   - `data` is a naked data structure — no methods
@@ -25,18 +24,19 @@
   - `enum` list of values (like `truthvalue`)
   - tagged `union` types (labelled data structures, no tuples)
     - `x.casename?.property`
-- Validation: `service` type cannot be assigned to `const`/`mut` variables
-- `trait` applicable to data-oriented type (i.e. `data` and `object`)
+  - Validation: `service` type cannot be assigned to `const`/`mut` variables (deferred from SEM-ANALYZE-001B)
+- `trait` applicable to data-oriented types (i.e. `data` and `object`)
 - `role` applicable to `service` (`ref` only)
+
 - Control flow
-  - Ternary operator with Python syntax: `a if x else b if !x else c`
+  - `while` and (maybe) `until`
+  - `for in` (no C-like `for` loop)
   - `unless (predicate) { return/continue/break }` (guard clause)
   - `if const cn = nullable { /* cn is available (and not null) inside the block */ }`
   - `unless const cn = x.casename { return } // cn exists (and is not null) after block`
-  - `for in` (no C-like `for` loop)
+  - Ternary operator with Python syntax: `a if x else b if !x else c`
   - `when`, `=>` pattern matching
   - `when` as expression
-  - `while` and (maybe) `until`
 
 ## To be considered after deferred lattice/narrowing is resumed
 
@@ -44,6 +44,33 @@
 - Staggered lattices `integer @range(1...10) \/ @range(55...100)` (where `\/` means union or join)
 - Optimise/prune the AST based on known value-sets
 
+## Known limitations
+
+- `ref` provenance is not tracked through `in` parameters
+  - This is a compile-time analysis limitation only; the runtime semantics flag on the allocation is unchanged
+  - A value originally `ref` loses its compile-time semantics classification when passed as `in`
+  - Forwarding it to a `ref` parameter is correctly rejected, but may surprise callers
+  - Resolving this requires flow-sensitive semantics tracking (post-V1)
+
 ## Refactorings and improvements
 
 - Deferred initialization
+- Optimisation of `mutateRC()` calls (prune provably-unique call sites)
+- Allow `=> expression` shorthand instead of block body in function declarations
+  - Enables inferring returned value-set from expression
+
+## New additions
+
+- Function declarations with and without argument labels — verify complete
+- `data` serialisation
+- modules and packages
+- namespaces and companions
+- linking to C APIs
+- `helper` keyword
+  - For implemented syntax, only function declarations are immediately relevant
+  - Full visibility semantics are not meaningful until modules/packages exist
+- Testing Framework/Library
+- Other frameworks (link with existing C libs in v1?)
+  - GUI
+  - Networking/Internet
+  - Database support (SQLite)
