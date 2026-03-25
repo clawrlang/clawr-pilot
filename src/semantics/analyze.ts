@@ -3,6 +3,7 @@ import type {
     AssignmentStatement,
     BinaryExpression,
     CallExpression,
+    DataDeclaration,
     Expression,
     FunctionDeclaration,
     IfStatement,
@@ -19,6 +20,7 @@ import type {
 } from '../ast'
 import {
     bitfieldSet,
+    dataValueSet,
     integerRange,
     integerSingleton,
     integerTop,
@@ -55,10 +57,21 @@ export interface ReturnNormalization {
     position: SourcePosition
 }
 
+export interface DataTypeField {
+    name: string
+    valueSet: ValueSet
+}
+
+export interface DataTypeInfo {
+    name: string
+    fields: Map<string, DataTypeField>
+}
+
 export interface SemanticProgram {
     // Legacy map kept for compatibility with existing tests and callers.
     bindings: Map<string, ValueSet>
     bindingStates: Map<string, SemanticBinding>
+    dataTypes: Map<string, DataTypeInfo>
     diagnostics: SemanticDiagnostic[]
     returnsRequiringNormalization: ReturnNormalization[]
 }
@@ -83,6 +96,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
     const bindings = new Map<string, ValueSet>()
     const bindingStates = new Map<string, SemanticBinding>()
     const subsetAliases = new Map<string, ValueSet>()
+    const dataTypes = new Map<string, DataTypeInfo>()
     const diagnostics: SemanticDiagnostic[] = []
     const returnsRequiringNormalization: ReturnNormalization[] = []
     const functionSignatures = collectFunctionSignatures(program, diagnostics)
@@ -93,6 +107,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
             bindings,
             bindingStates,
             subsetAliases,
+            dataTypes,
             functionSignatures,
             diagnostics,
             null,
@@ -103,6 +118,7 @@ export function analyzeProgram(program: Program): SemanticProgram {
     return {
         bindings,
         bindingStates,
+        dataTypes,
         diagnostics,
         returnsRequiringNormalization,
     }
@@ -320,6 +336,7 @@ function analyzeStatement(
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    dataTypes: Map<string, DataTypeInfo>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     functionContext: FunctionAnalysisContext | null,
@@ -330,12 +347,22 @@ function analyzeStatement(
             analyzeSubsetDeclaration(statement, subsetAliases, diagnostics)
             return
         }
+        case 'DataDeclaration': {
+            analyzeDataDeclaration(
+                statement,
+                dataTypes,
+                subsetAliases,
+                diagnostics,
+            )
+            return
+        }
         case 'VariableDeclaration': {
             const inferred = inferDeclarationBinding(
                 statement,
                 bindings,
                 bindingStates,
                 subsetAliases,
+                dataTypes,
                 functionSignatures,
                 diagnostics,
             )
@@ -369,6 +396,7 @@ function analyzeStatement(
             analyzeFunctionDeclaration(
                 statement,
                 subsetAliases,
+                dataTypes,
                 functionSignatures,
                 diagnostics,
                 returnsRequiringNormalization,
@@ -393,6 +421,7 @@ function analyzeStatement(
                 bindings,
                 bindingStates,
                 subsetAliases,
+                dataTypes,
                 functionSignatures,
                 diagnostics,
                 functionContext,
@@ -425,6 +454,7 @@ function topValueSetForTypeName(typeName: string | null): ValueSet {
 function analyzeFunctionDeclaration(
     statement: FunctionDeclaration,
     subsetAliases: Map<string, ValueSet>,
+    dataTypes: Map<string, DataTypeInfo>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     returnsRequiringNormalization: ReturnNormalization[] = [],
@@ -465,6 +495,7 @@ function analyzeFunctionDeclaration(
             localBindings,
             localBindingStates,
             subsetAliases,
+            dataTypes,
             functionSignatures,
             diagnostics,
             context,
@@ -614,6 +645,43 @@ function analyzeReturnStatement(
             })
         }
     }
+}
+
+function analyzeDataDeclaration(
+    statement: DataDeclaration,
+    dataTypes: Map<string, DataTypeInfo>,
+    subsetAliases: Map<string, ValueSet>,
+    diagnostics: SemanticDiagnostic[],
+) {
+    const name = statement.identifier.name
+    if (dataTypes.has(name)) {
+        diagnostics.push({
+            position: statement.position,
+            message: `duplicate data type '${name}'`,
+        })
+        return
+    }
+
+    const fields = new Map<string, DataTypeField>()
+    for (const field of statement.fields) {
+        if (fields.has(field.name)) {
+            diagnostics.push({
+                position: field.position,
+                message: `duplicate field '${field.name}' in data type '${name}'`,
+            })
+            continue
+        }
+        const valueSet = allowedValueSetFromTypeAnnotation(
+            field.typeAnnotation,
+            subsetAliases,
+            dataTypes,
+            field.position,
+            diagnostics,
+        )
+        fields.set(field.name, { name: field.name, valueSet })
+    }
+
+    dataTypes.set(name, { name, fields })
 }
 
 function analyzeSubsetDeclaration(
@@ -772,6 +840,7 @@ function analyzeIfStatement(
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    dataTypes: Map<string, DataTypeInfo>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
     functionContext: FunctionAnalysisContext | null,
@@ -830,6 +899,7 @@ function analyzeIfStatement(
                 thenBindings,
                 thenBindingStates,
                 subsetAliases,
+                dataTypes,
                 functionSignatures,
                 diagnostics,
                 functionContext,
@@ -845,6 +915,7 @@ function analyzeIfStatement(
                 elseBindings,
                 elseBindingStates,
                 subsetAliases,
+                dataTypes,
                 functionSignatures,
                 diagnostics,
                 functionContext,
@@ -953,9 +1024,26 @@ function inferDeclarationBinding(
     bindings: Map<string, ValueSet>,
     bindingStates: Map<string, SemanticBinding>,
     subsetAliases: Map<string, ValueSet>,
+    dataTypes: Map<string, DataTypeInfo>,
     functionSignatures: Map<string, FunctionSignature>,
     diagnostics: SemanticDiagnostic[],
 ): SemanticBinding | null {
+    // DATA-ANALYZE-002: data literals require a known target data type from annotation.
+    // When a data literal is paired with an annotation naming a registered data type,
+    // accept it early; field-level validation is handled by DATA-ANALYZE-003+.
+    if (
+        statement.initializer.kind === 'DataLiteral' &&
+        statement.typeAnnotation !== null &&
+        statement.typeAnnotation.kind === 'subset-alias'
+    ) {
+        const typeName = statement.typeAnnotation.name
+        const dataType = dataTypes.get(typeName)
+        if (dataType) {
+            const vs = dataValueSet(typeName)
+            return { semantics: statement.semantics, current: vs, allowed: vs }
+        }
+    }
+
     const initializer = inferExpressionValueSet(
         statement.initializer,
         bindings,
@@ -972,6 +1060,7 @@ function inferDeclarationBinding(
             : allowedValueSetFromTypeAnnotation(
                   statement.typeAnnotation,
                   subsetAliases,
+                  dataTypes,
                   statement.position,
                   diagnostics,
               )
@@ -987,11 +1076,13 @@ function inferDeclarationBinding(
     }
 
     if (statement.semantics === 'ref') {
-        diagnostics.push({
-            position: statement.position,
-            message: `ref is only supported for shared structures (data/object/service), got ${describeValueSet(initializer)}`,
-        })
-        return null
+        if (initializer.family !== 'data') {
+            diagnostics.push({
+                position: statement.position,
+                message: `ref is only supported for shared structures (data/object/service), got ${describeValueSet(initializer)}`,
+            })
+            return null
+        }
     }
 
     if (statement.semantics === 'const') {
@@ -1073,8 +1164,12 @@ function inferExpressionValueSet(
         case 'MemberExpression':
             return null
         case 'DataLiteral':
-        // Data literals require context typing; return null for now
-        // Semantic validation will happen in DATA-ANALYZE-002+
+            diagnostics.push({
+                position: expression.position,
+                message:
+                    'data literal requires a known target type in V1; add a type annotation',
+            })
+            return null
     }
     return null
 }
@@ -1470,6 +1565,7 @@ function describeValueSet(valueSet: ValueSet): string {
         }
         return `string[/${valueSet.pattern}/${valueSet.modifiers}]`
     }
+    if (valueSet.family === 'data') return `data[${valueSet.typeName}]`
     return 'unknown'
 }
 
@@ -1601,12 +1697,16 @@ function topForValueSet(valueSet: ValueSet): ValueSet {
             return bitfieldSet()
         case 'tritfield':
             return tritfieldSet()
+        case 'data':
+            // Data types are nominal; the "top" for a data value is the type itself.
+            return valueSet
     }
 }
 
 function allowedValueSetFromTypeAnnotation(
     typeAnnotation: TypeAnnotation,
     subsetAliases: Map<string, ValueSet>,
+    dataTypes: Map<string, DataTypeInfo>,
     position: SourcePosition,
     diagnostics: SemanticDiagnostic[],
 ): ValueSet {
@@ -1618,6 +1718,10 @@ function allowedValueSetFromTypeAnnotation(
     }
 
     if (typeAnnotation.kind === 'subset-alias') {
+        const dataType = dataTypes.get(typeAnnotation.name)
+        if (dataType) {
+            return dataValueSet(typeAnnotation.name)
+        }
         const resolved = subsetAliases.get(typeAnnotation.name)
         if (!resolved) {
             diagnostics.push({

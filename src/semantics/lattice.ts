@@ -11,6 +11,7 @@ export type ValueSet =
     | StringValueSet
     | BitfieldValueSet
     | TritfieldValueSet
+    | DataValueSet
 
 export interface NeverValueSet {
     family: 'never'
@@ -81,6 +82,11 @@ export interface BitfieldValueSet {
 export interface TritfieldValueSet {
     family: 'tritfield'
     length: number | null
+}
+
+export interface DataValueSet {
+    family: 'data'
+    typeName: string
 }
 
 type IntegerBounds = {
@@ -283,6 +289,10 @@ export function tritfieldSet(length?: number): TritfieldValueSet {
     return { family: 'tritfield', length: length ?? null }
 }
 
+export function dataValueSet(typeName: string): DataValueSet {
+    return { family: 'data', typeName }
+}
+
 export function joinValueSets(left: ValueSet, right: ValueSet): ValueSet {
     if (left.family === 'never') return right
     if (right.family === 'never') return left
@@ -308,6 +318,10 @@ export function joinValueSets(left: ValueSet, right: ValueSet): ValueSet {
             return left.length === (right as TritfieldValueSet).length
                 ? left
                 : tritfieldSet()
+        case 'data':
+            return (right as DataValueSet).typeName === left.typeName
+                ? left
+                : neverValueSet
     }
 }
 
@@ -342,6 +356,10 @@ export function meetValueSets(left: ValueSet, right: ValueSet): ValueSet {
             if (left.length === null) return right as TritfieldValueSet
             if (rightTritfield.length === null) return left
             return left.length === rightTritfield.length ? left : neverValueSet
+        case 'data':
+            return (right as DataValueSet).typeName === left.typeName
+                ? left
+                : neverValueSet
     }
 }
 
@@ -375,6 +393,8 @@ export function equalValueSets(left: ValueSet, right: ValueSet): boolean {
             return left.length === (right as BitfieldValueSet).length
         case 'tritfield':
             return left.length === (right as TritfieldValueSet).length
+        case 'data':
+            return left.typeName === (right as DataValueSet).typeName
     }
 }
 

@@ -3,6 +3,7 @@ import { parseClawr } from '../../src/parser'
 import {
     analyzeProgram,
     bitfieldSet,
+    dataValueSet,
     equalValueSets,
     integerRange,
     integerSingleton,
@@ -945,5 +946,144 @@ describe('if/else branch-local narrowing', () => {
 
         const semanticProgram = analyzeProgram(program)
         expect(semanticProgram.diagnostics).toEqual([])
+    })
+})
+
+describe('DATA-ANALYZE-001: nominal data type registration', () => {
+    it('registers a data declaration as a distinct nominal type', () => {
+        const program = parseClawr(
+            'data Point { x: integer, y: integer }',
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        const point = semanticProgram.dataTypes.get('Point')
+        expect(point).toBeDefined()
+        expect(point!.name).toBe('Point')
+        expect(point!.fields.size).toBe(2)
+        expect(point!.fields.get('x')?.valueSet).toEqual(integerTop())
+        expect(point!.fields.get('y')?.valueSet).toEqual(integerTop())
+    })
+
+    it('registers multiple independent data types', () => {
+        const program = parseClawr(
+            [
+                'data Point { x: integer, y: integer }',
+                'data Color { r: integer, g: integer, b: integer }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        expect(semanticProgram.dataTypes.has('Point')).toBe(true)
+        expect(semanticProgram.dataTypes.has('Color')).toBe(true)
+        expect(semanticProgram.dataTypes.get('Color')!.fields.size).toBe(3)
+    })
+
+    it('registers fields with non-integer value set annotations', () => {
+        const program = parseClawr(
+            'data Foo { alive: truthvalue in {false, true}, label: string }',
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        const foo = semanticProgram.dataTypes.get('Foo')
+        expect(foo!.fields.get('alive')?.valueSet).toEqual(
+            truthvalueSet('false', 'true'),
+        )
+        expect(foo!.fields.get('label')?.valueSet).toEqual(stringTop())
+    })
+
+    it('rejects duplicate data type names', () => {
+        const program = parseClawr(
+            ['data Point { x: integer }', 'data Point { y: integer }'].join(
+                '\n',
+            ),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "duplicate data type 'Point'",
+        )
+    })
+
+    it('rejects duplicate field names within a data declaration', () => {
+        const program = parseClawr('data Bad { x: integer, x: real }', 'test')
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "duplicate field 'x' in data type 'Bad'",
+        )
+    })
+})
+
+describe('DATA-ANALYZE-002: context-typed literal enforcement', () => {
+    it('rejects a data literal with no type annotation', () => {
+        const program = parseClawr(
+            'data Point { x: integer, y: integer }\nconst p = { x: 1, y: 2 }',
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            'data literal requires a known target type in V1; add a type annotation',
+        )
+    })
+
+    it('accepts a data literal when the annotation names a registered data type', () => {
+        const program = parseClawr(
+            [
+                'data Point { x: integer, y: integer }',
+                'const p: Point = { x: 1, y: 2 }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        expect(semanticProgram.bindingStates.get('p')).toEqual({
+            semantics: 'const',
+            current: dataValueSet('Point'),
+            allowed: dataValueSet('Point'),
+        })
+    })
+
+    it('accepts mut and ref declarations with a data type annotation', () => {
+        const program = parseClawr(
+            [
+                'data Point { x: integer, y: integer }',
+                'mut m: Point = { x: 0, y: 0 }',
+                'ref r: Point = { x: 1, y: 1 }',
+            ].join('\n'),
+            'test',
+        )
+
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics).toEqual([])
+
+        expect(semanticProgram.bindingStates.get('m')?.semantics).toBe('mut')
+        expect(semanticProgram.bindingStates.get('r')?.semantics).toBe('ref')
+        expect(semanticProgram.bindings.get('m')).toEqual(dataValueSet('Point'))
+        expect(semanticProgram.bindings.get('r')).toEqual(dataValueSet('Point'))
+    })
+
+    it('rejects a data literal when annotation does not name a registered data type', () => {
+        const program = parseClawr('const p: Unknown = { x: 1 }', 'test')
+
+        const semanticProgram = analyzeProgram(program)
+        // 'Unknown' is not in dataTypes, so the early-return path is skipped and
+        // inferExpressionValueSet fires the context-type-required diagnostic first.
+        const messages = semanticProgram.diagnostics.map((d) => d.message)
+        expect(messages).toContain(
+            'data literal requires a known target type in V1; add a type annotation',
+        )
     })
 })
