@@ -1,5 +1,11 @@
 # TODO
 
+- `data` keyword
+  - See `.github/prompts/data-keyword.md` for V1 normative spec and ticket breakdown
+  - Priority: implement DATA-V1 ticket family next
+  - Key constraints: context-typed literals only, literal-only initialization, nominal typing, no instance methods
+  - Deferred: generics and recursive fields
+
 - Milestone focus (near-term)
   - Prioritize runtime and language completeness over advanced analysis.
   - Keep subset constraints enforcing compile-time assignment compatibility.

@@ -143,98 +143,82 @@ Clawr V1 should prefer obvious correctness over aggressive optimization.
 Use this checklist when implementing semantics in parser, semantic analysis, and codegen.
 
 1. Parse and AST
-
-- Keep variable semantics as exactly `const`, `mut`, `ref`.
-- Parse parameter modes as `in` (implicit default), `const`, `mut`, `ref`.
-- Parse return categories as `-> T`, `-> const T`, `-> ref T`.
+   - Keep variable semantics as exactly `const`, `mut`, `ref`.
+   - Parse parameter modes as `in` (implicit default), `const`, `mut`, `ref`.
+   - Parse return categories as `-> T`, `-> const T`, `-> ref T`.
 
 2. Type Families and Eligibility
-
-- Mark which types are reference-counted entities (`data`, `object`, `service`).
-- Reject `ref` declarations for non-entity families.
+   - Mark which types are reference-counted entities (`data`, `object`, `service`).
+   - Reject `ref` declarations for non-entity families.
 
 3. Assignment Checking
-
-- Allow isolated-to-isolated (`const`/`mut` to `const`/`mut`).
-- Allow shared-to-shared (`ref` to `ref`).
-- Reject isolated-to-shared and shared-to-isolated unless explicit `copy()` appears.
-- Treat assignment from `-> T` as commit to receiver semantics.
+   - Allow isolated-to-isolated (`const`/`mut` to `const`/`mut`).
+   - Allow shared-to-shared (`ref` to `ref`).
+   - Reject isolated-to-shared and shared-to-isolated unless explicit `copy()` appears.
+   - Treat assignment from `-> T` as commit to receiver semantics.
 
 4. Parameter Checking
-
-- `in`: accept all three variable semantics, read-only body access.
-- `const`: accept isolated values only, read-only body access.
-- `mut`: accept isolated values only, mutable body access with CoW.
-- `ref`: accept shared values only, mutable shared access.
-- Never insert implicit semantic-conversion copies at call sites.
+   - `in`: accept all three variable semantics, read-only body access.
+   - `const`: accept isolated values only, read-only body access.
+   - `mut`: accept isolated values only, mutable body access with CoW.
+   - `ref`: accept shared values only, mutable shared access.
+   - Never insert implicit semantic-conversion copies at call sites.
 
 5. Return Checking
-
-- `-> ref T`: only allow returning shared memory.
-- `-> const T`: only allow returning isolated memory.
-- `-> T`: require unique return transport; if proof is non-trivial in V1, conservatively normalize.
-- Note: `-> const T` might be redundant and replaceable with `-> T` in all cases.
+   - `-> ref T`: only allow returning shared memory.
+   - `-> const T`: only allow returning isolated memory.
+   - `-> T`: require unique return transport; if proof is non-trivial in V1, conservatively normalize.
+   - Note: `-> const T` might be redundant and replaceable with `-> T` in all cases.
 
 6. Mutation Lowering
-
-- For isolated mutation sites, call `mutateRC()` before in-place mutation.
-- For shared mutation sites, never call `mutateRC()` to force isolation.
-- Note: Calling `mutateRC()` is not harmful. Pruning calls can be viewed as a form of optimisation.
+   - For isolated mutation sites, call `mutateRC()` before in-place mutation.
+   - For shared mutation sites, never call `mutateRC()` to force isolation.
+   - Note: Calling `mutateRC()` is not harmful. Pruning calls can be viewed as a form of optimisation.
 
 7. Temporary Ownership
-
-- Model `-> T` as move-style transport for temporaries.
-- Ensure each temporary unique value is released exactly once if not stored.
+   - Model `-> T` as move-style transport for temporaries.
+   - Ensure each temporary unique value is released exactly once if not stored.
 
 8. Diagnostics
-
-- Provide semantic mismatch errors that explicitly name source and target semantics.
-- For conversion requirements, suggest explicit `copy()` in diagnostics.
+   - Provide semantic mismatch errors that explicitly name source and target semantics.
+   - For conversion requirements, suggest explicit `copy()` in diagnostics.
 
 9. Testing
-
-- Add matrix tests for assignment and parameter compatibility.
-- Add return tests for all three categories (`-> T`, `-> const T`, `-> ref T`).
-- Add temporary-expression tests (`consume(factory())`, chained calls, discarded returns) for leaks/double-release behavior.
+   - Add matrix tests for assignment and parameter compatibility.
+   - Add return tests for all three categories (`-> T`, `-> const T`, `-> ref T`).
+   - Add temporary-expression tests (`consume(factory())`, chained calls, discarded returns) for leaks/double-release behavior.
 
 ### Semantic Analyzer Rule Sketch (V1)
 
 This sketch is intentionally conservative and maps directly to checker logic.
 
 1. Each expression should carry two pieces of information in analysis:
-
-- Value/type domain information.
-- Memory semantics class: `isolated`, `shared`, or `unique-return`.
+   - Value/type domain information.
+   - Memory semantics class: `isolated`, `shared`, or `unique-return`.
 
 2. For variable reads:
-
-- `const` and `mut` bindings evaluate as `isolated`.
-- `ref` bindings evaluate as `shared`.
+   - `const` and `mut` bindings evaluate as `isolated`.
+   - `ref` bindings evaluate as `shared`.
 
 3. For calls:
-
-- Validate each argument against parameter mode compatibility.
-- If parameter is `mut`, mark body-local binding mutable and isolated.
+   - Validate each argument against parameter mode compatibility.
+   - If parameter is `mut`, mark body-local binding mutable and isolated.
 
 4. For assignment:
-
-- Check compatibility from expression semantics class to receiver semantics.
-- Allow `unique-return` to commit to either isolated or shared depending on receiver.
+   - Check compatibility from expression semantics class to receiver semantics.
+   - Allow `unique-return` to commit to either isolated or shared depending on receiver.
 
 5. For `copy()`:
-
-- Always emit expression semantics class as `unique-return`.
+   - Always emit expression semantics class as `unique-return`.
 
 6. For returns:
-
-- `-> ref T`: require returned expression class `shared`.
-- `-> const T`: require returned expression class `isolated`.
-- `-> T`: require `unique-return`; if expression class is only `isolated` and non-trivially unique, require conservative normalization before codegen.
+   - `-> ref T`: require returned expression class `shared`.
+   - `-> const T`: require returned expression class `isolated`.
+   - `-> T`: require `unique-return`; if expression class is only `isolated` and non-trivially unique, require conservative normalization before codegen.
 
 7. For mutation expressions:
-
-- Permit only through mutable bindings (`mut` or `ref`, plus mutable parameter rules).
-- Attach mutation strategy tag for codegen: `isolated-cow` or `shared-in-place`.
+   - Permit only through mutable bindings (`mut` or `ref`, plus mutable parameter rules).
+   - Attach mutation strategy tag for codegen: `isolated-cow` or `shared-in-place`.
 
 ### Surface Syntax Recommendation for Copy
 
@@ -256,13 +240,12 @@ This section turns the V1 spec into concrete implementation tickets, grouped by 
 #### Parser and AST
 
 0. `SEM-PARSE-000` Function and method declaration parsing foundation
-
-- Scope: Implement parser and AST support for function declarations and/or method declarations as a prerequisite for parameter and return semantics parsing.
-- Targets: `src/parser/index.ts`, `src/ast/index.ts`.
-- Acceptance criteria:
-  - Parser recognizes function declarations.
-  - Parser recognizes method declarations, or documents method parsing as an explicitly deferred follow-up.
-  - AST nodes exist for parsed function/method declarations with parameter and return slots ready for semantics extensions.
+   - Scope: Implement parser and AST support for function declarations and/or method declarations as a prerequisite for parameter and return semantics parsing.
+   - Targets: `src/parser/index.ts`, `src/ast/index.ts`.
+   - Acceptance criteria:
+     - Parser recognizes function declarations.
+     - Parser recognizes method declarations, or documents method parsing as an explicitly deferred follow-up.
+     - AST nodes exist for parsed function/method declarations with parameter and return slots ready for semantics extensions.
 
 1. `SEM-PARSE-001` Variable semantics syntax stabilization
    - Scope: Ensure variable declarations are parsed with semantics exactly `const | mut | ref`.
