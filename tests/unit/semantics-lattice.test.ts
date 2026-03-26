@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'bun:test'
 import { parseClawr } from '../../src/parser'
 import {
-    analyzeProgram,
     bitfieldSet,
     dataValueSet,
     equalValueSets,
@@ -15,6 +14,8 @@ import {
     realRange,
     realSingleton,
     realTop,
+    SemanticAnalyzer,
+    SemanticProgram,
     stringLengthAndPattern,
     stringLengthRange,
     stringPattern,
@@ -22,6 +23,7 @@ import {
     truthvalueSet,
     truthvalueTop,
 } from '../../src/semantics'
+import { Program } from '../../src/ast'
 
 describe('semantics lattice', () => {
     it('joins integer singletons into a covering range', () => {
@@ -1155,3 +1157,8 @@ describe('DATA-ANALYZE-003/004: data literal field validation', () => {
         )
     })
 })
+
+function analyzeProgram(program: Program): SemanticProgram {
+    const analyzer = new SemanticAnalyzer()
+    return analyzer.analyzeProgram(program)
+}

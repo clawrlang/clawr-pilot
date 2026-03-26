@@ -1,11 +1,11 @@
 export {
-    analyzeProgram,
+    SemanticAnalyzer,
     type DataTypeField,
     type DataTypeInfo,
     type SemanticBinding,
     type SemanticDiagnostic,
     type SemanticProgram,
-} from './analyze'
+} from './semantic-analyzer'
 export {
     bitfieldSet,
     dataValueSet,

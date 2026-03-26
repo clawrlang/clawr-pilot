@@ -6,11 +6,8 @@ import child_process from 'node:child_process'
 import { Command } from 'commander'
 import { glob } from 'fast-glob'
 import { parseClawr } from '../parser'
-import {
-    analyzeProgram,
-    type SemanticDiagnostic,
-    type SemanticProgram,
-} from '../semantics'
+import type { SemanticDiagnostic, SemanticProgram } from '../semantics'
+import { SemanticAnalyzer } from '../semantics/semantic-analyzer'
 import { lowerToCIr } from '../codegen'
 import { emitC } from '../ir/c'
 import { optimizeCIr } from '../optimizer'
@@ -37,7 +34,8 @@ async function buildCommand(sourceFile: string, outDir: string) {
     const absoluteSourcePath = path.resolve(process.cwd(), sourceFile)
     const source = fs.readFileSync(absoluteSourcePath, 'utf-8')
     const ast = parseClawr(source, absoluteSourcePath)
-    const semanticProgram: SemanticProgram = analyzeProgram(ast)
+    const analyzer = new SemanticAnalyzer()
+    const semanticProgram: SemanticProgram = analyzer.analyzeProgram(ast)
     if (semanticProgram.diagnostics.length > 0) {
         const message = semanticProgram.diagnostics
             .map(
