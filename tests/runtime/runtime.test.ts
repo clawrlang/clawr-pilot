@@ -4,11 +4,11 @@ import child_process from 'node:child_process'
 import { describe, expect, test } from 'bun:test'
 import { glob } from 'fast-glob'
 
-const CASES_DIR = path.join(__dirname, 'c-cases')
+const CASES_DIR = path.join(__dirname, 'cases')
 const OUTPUT_DIR = path.join(__dirname, 'out')
 const RUNTIME_DIR = path.join(__dirname, '../../src/runtime')
 
-describe('End-to-end Tests', () => {
+describe('Runtime Tests', () => {
     const cases = fs
         .readdirSync(CASES_DIR, { withFileTypes: true })
         .map((f) => f.name)

@@ -14,14 +14,14 @@
     },
     {
       "type": "npm",
-      "script": "test:all",
+      "script": "test:e2e",
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": [],
-      "label": "npm: test:all",
-      "detail": "npm-run-all build --serial test:all:run"
+      "label": "npm: test:e2e",
+      "detail": "bun run build && bun test tests/unit && bun test tests/e2e"
     }
   ]
 }

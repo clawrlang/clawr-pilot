@@ -29,7 +29,8 @@ This project is written in TypeScript for [Node.js](https://nodejs.org/en/downlo
 npm install
 npm run build     # Generate the rwrc executable (in ./dist)
 npm run test      # Run unit tests (skipping slow E2E tests)
-npm run test:all  # Run all automated tests (including E2E tests)
+npm run test:e2e  # Run unit tests + E2E tests (skipping runtime tests)
+npm run test:all  # Run all automated tests (including E2E and runtime tests)
 
 # Compile a source file (after build):
 ./dist/rwrc build my_prog.clawr -o .

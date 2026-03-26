@@ -4,12 +4,13 @@
   "description": "Prototype compiler for the Clawr language",
   "scripts": {
     "typecheck": "tsc -p tsconfig.typecheck.json && tsc -p tests/tsconfig.json",
-    "check:no-explicit-any": "if command -v rg >/dev/null 2>&1; then rg -n --pcre2 \":\\\\s*any\\\\b\" src tests; else grep -RInE \":[[:space:]]*any\\\\b\" src tests; fi && (echo \"Found explicit any annotations\" && exit 1) || exit 0",
     "build": "bun run typecheck && bun build src/rwrc/index.ts --compile --outfile dist/rwrc",
     "dev": "ts-node src/rwrc/index.ts",
     "lint": "eslint . --ext .ts",
-    "test": "npm run typecheck && npm run check:no-explicit-any && bun test tests/unit",
-    "test:all": "bun run build && npm run check:no-explicit-any && bun test tests/unit && bun test tests/e2e",
+    "test": "npm run typecheck && bun test tests/unit",
+    "test:runtime": "bun test tests/runtime",
+    "test:e2e": "bun run build && bun test tests/unit && bun test tests/e2e",
+    "test:all": "bun run test:runtime && bun run test:e2e && bun test tests/unit",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "author": "",
