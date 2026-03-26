@@ -10,7 +10,7 @@
     "test": "npm run typecheck && bun test tests/unit",
     "test:runtime": "bun test tests/runtime",
     "test:e2e": "bun run build && bun test tests/unit && bun test tests/e2e",
-    "test:all": "bun test tests/unit && bun run test:runtime && bun test tests/e2e",
+    "test:all": "bun test tests/unit && bun run build && bun run test:runtime && bun test tests/e2e",
     "format": "prettier --write \"src/**/*.ts\""
   },
   "author": "",

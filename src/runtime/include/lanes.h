@@ -6,7 +6,7 @@
 
 typedef unsigned long long BinaryLaneField;
 
-String* binarylane__toStringRC(BinaryLaneField value, uint32_t length);
-String* ternarylane__toStringRC(BinaryLaneField x0, BinaryLaneField x1, uint32_t length);
+String* binarylane¸toStringRC(BinaryLaneField value, uint32_t length);
+String* ternarylane¸toStringRC(BinaryLaneField x0, BinaryLaneField x1, uint32_t length);
 
 #endif // CLAWR_LANES_H

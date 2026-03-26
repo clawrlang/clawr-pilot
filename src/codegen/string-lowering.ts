@@ -229,7 +229,7 @@ function lowerStringExpression(
                             name: stringObjectTemp,
                             initializer: {
                                 kind: 'CCallExpression',
-                                callee: 'ternarylane__toStringRC',
+                                callee: 'ternarylane¸toStringRC',
                                 args: [
                                     {
                                         kind: 'CIdentifier',
@@ -285,7 +285,7 @@ function lowerStringExpression(
                             name: stringObjectTemp,
                             initializer: {
                                 kind: 'CCallExpression',
-                                callee: 'binarylane__toStringRC',
+                                callee: 'binarylane¸toStringRC',
                                 args: [
                                     {
                                         kind: 'CIdentifier',
