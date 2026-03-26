@@ -119,33 +119,34 @@ This section is implementation-facing. If exploratory notes elsewhere disagree, 
 
 This section turns the V1 spec into concrete tickets ordered by dependency.
 
-### Parser and AST
+### Parser and AST ✅
 
-1. `DATA-PARSE-001` Data declaration parsing
+1. `DATA-PARSE-001` Data declaration parsing ✅
    - Scope: Parse `data Name { ... }` declarations and field lists.
 
-2. `DATA-PARSE-002` Data literal parsing
+2. `DATA-PARSE-002` Data literal parsing ✅
    - Scope: Parse `{ field: expr, ... }` literal syntax with newline/comma separators.
 
-3. `DATA-PARSE-003` Field separator normalization
+3. `DATA-PARSE-003` Field separator normalization ✅
    - Scope: Support mixed newline/comma separators in declarations and literals.
 
 ### Semantic Analysis
 
-4. `DATA-ANALYZE-001` Nominal data type registration
+4. `DATA-ANALYZE-001` Nominal data type registration ✅
    - Scope: Register each `data` declaration as a distinct nominal type with field map.
 
-5. `DATA-ANALYZE-002` Context-typed literal enforcement
+5. `DATA-ANALYZE-002` Context-typed literal enforcement ✅
    - Scope: Require known target type for data literals in V1.
 
-6. `DATA-ANALYZE-003` Field completeness and unknown-field checks
+6. `DATA-ANALYZE-003` Field completeness and unknown-field checks ✅
    - Scope: Validate missing/extra fields in literals.
 
-7. `DATA-ANALYZE-004` Field value compatibility checks
+7. `DATA-ANALYZE-004` Field value compatibility checks ✅
    - Scope: Validate each literal field expression against declared ValueSet.
 
 8. `DATA-ANALYZE-005` Field mutation eligibility checks
    - Scope: Enforce `const`/`mut`/`ref` rules for field write operations.
+   - Blocked: needs parsing of dot operator and field assignment
 
 ### Codegen and Runtime Integration
 
