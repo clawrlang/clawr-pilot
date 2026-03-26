@@ -20,17 +20,14 @@ const TRIT_CALLABLES: CallableRegistry<TritBaseName> = {
     freeCalls: {
         adjust: {
             baseName: 'adjust',
-            arity: 2,
             canonicalLabels: [null, 'towards'],
         },
         rotate: {
             baseName: 'rotate',
-            arity: 2,
             canonicalLabels: [null, 'by'],
         },
         modulate: {
             baseName: 'modulate',
-            arity: 2,
             canonicalLabels: [null, 'by'],
         },
     },

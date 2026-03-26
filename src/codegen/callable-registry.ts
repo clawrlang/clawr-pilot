@@ -2,7 +2,6 @@ import type { CallArgument, Expression } from '../ast'
 
 export type CallableSignatureSpec<TBaseName extends string = string> = {
     baseName: TBaseName
-    arity: number
     canonicalLabels: ReadonlyArray<string | null>
 }
 
@@ -47,7 +46,7 @@ export function lookupFreeCallSpec<TBaseName extends string>(
     arity: number,
 ): CallableSignatureSpec<TBaseName> | null {
     const spec = registry.freeCalls[name as TBaseName]
-    if (!spec || spec.arity !== arity) return null
+    if (!spec || spec.canonicalLabels.length !== arity) return null
     return spec
 }
 

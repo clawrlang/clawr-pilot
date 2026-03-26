@@ -26,12 +26,10 @@ describe('callable registry', () => {
         freeCalls: {
             adjust: {
                 baseName: 'adjust',
-                arity: 2,
                 canonicalLabels: [null, 'towards'],
             },
             rotate: {
                 baseName: 'rotate',
-                arity: 2,
                 canonicalLabels: [null, 'by'],
             },
         },
