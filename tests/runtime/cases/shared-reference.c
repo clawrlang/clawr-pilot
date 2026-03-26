@@ -1,4 +1,4 @@
-#include "data_stucture.h"
+#include "data_structure.h"
 #include <stdio.h>
 
 int main() {
