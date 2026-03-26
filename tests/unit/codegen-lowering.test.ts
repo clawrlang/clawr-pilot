@@ -184,7 +184,7 @@ describe('codegen lowering behavior', () => {
         )
         const serialized = JSON.stringify(ir)
 
-        expect(serialized).toContain('unsigned long long')
+        expect(serialized).toContain('BinaryLaneField')
         expect(serialized).toContain('10ULL')
         expect(serialized).toContain('12ULL')
         expect(serialized).toContain(') & (')

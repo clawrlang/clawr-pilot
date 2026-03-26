@@ -2,14 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "lanes.h"
 
 typedef struct {
-    unsigned long long x0;
-    unsigned long long x1;
+    BinaryLaneField x0;
+    BinaryLaneField x1;
     size_t length;
 } TritField;
 
-static unsigned long long maskForLength(size_t length) {
+static BinaryLaneField maskForLength(size_t length) {
     if (length >= 64) {
         return ~0ULL;
     }
@@ -18,8 +19,8 @@ static unsigned long long maskForLength(size_t length) {
 
 static TritField tritfieldFromString(const char *text) {
     const size_t length = strlen(text);
-    unsigned long long x0 = 0ULL;
-    unsigned long long x1 = 0ULL;
+    BinaryLaneField x0 = 0ULL;
+    BinaryLaneField x1 = 0ULL;
 
     for (size_t i = 0; i < length; i++) {
         const char ch = text[i];
@@ -77,9 +78,9 @@ static TritField orField(const TritField a, const TritField b) {
 }
 
 static TritField notField(const TritField a) {
-    const unsigned long long mask = maskForLength(a.length);
-    const unsigned long long y0 = (~a.x1) & mask;
-    const unsigned long long y1 = (~a.x1 & ~a.x0) & mask;
+    const BinaryLaneField mask = maskForLength(a.length);
+    const BinaryLaneField y0 = (~a.x1) & mask;
+    const BinaryLaneField y1 = (~a.x1 & ~a.x0) & mask;
 
     return (TritField){
         .x0 = y0,

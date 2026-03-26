@@ -87,7 +87,7 @@ export function lowerBitfieldExpression(
                 ...operand.setup,
                 {
                     kind: 'CVariableDeclaration',
-                    type: 'unsigned long long',
+                    type: 'BinaryLaneField',
                     name: temp,
                     initializer: {
                         kind: 'CRawExpression',
@@ -126,7 +126,7 @@ export function lowerBitfieldExpression(
                 ...right.setup,
                 {
                     kind: 'CVariableDeclaration',
-                    type: 'unsigned long long',
+                    type: 'BinaryLaneField',
                     name: temp,
                     initializer: {
                         kind: 'CRawExpression',

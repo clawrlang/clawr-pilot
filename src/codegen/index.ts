@@ -1258,7 +1258,7 @@ function lowerVariableDeclaration(
         statements.push(...lowered.setup)
         statements.push({
             kind: 'CVariableDeclaration',
-            type: 'unsigned long long',
+            type: 'BinaryLaneField',
             name: statement.identifier.name,
             initializer: lowered.value,
         })
@@ -1290,13 +1290,13 @@ function lowerVariableDeclaration(
         statements.push(...lowered.setup)
         statements.push({
             kind: 'CVariableDeclaration',
-            type: 'unsigned long long',
+            type: 'BinaryLaneField',
             name: tritfieldPlaneName(statement.identifier.name, 0),
             initializer: lowered.x0,
         })
         statements.push({
             kind: 'CVariableDeclaration',
-            type: 'unsigned long long',
+            type: 'BinaryLaneField',
             name: tritfieldPlaneName(statement.identifier.name, 1),
             initializer: lowered.x1,
         })

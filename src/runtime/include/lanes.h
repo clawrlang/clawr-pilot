@@ -4,7 +4,9 @@
 #include "clawr_string.h"
 #include <stdint.h>
 
-String* binarylane__toStringRC(uint64_t value, uint32_t length);
-String* ternarylane__toStringRC(uint64_t x0, uint64_t x1, uint32_t length);
+typedef unsigned long long BinaryLaneField;
+
+String* binarylane__toStringRC(BinaryLaneField value, uint32_t length);
+String* ternarylane__toStringRC(BinaryLaneField x0, BinaryLaneField x1, uint32_t length);
 
 #endif // CLAWR_LANES_H

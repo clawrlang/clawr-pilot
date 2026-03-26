@@ -2,14 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "lanes.h"
 
 typedef struct {
-    unsigned long long x0;
-    unsigned long long x1;
+    BinaryLaneField x0;
+    BinaryLaneField x1;
     size_t length;
 } TritField;
 
-static unsigned long long maskForLength(const size_t length) {
+static BinaryLaneField maskForLength(const size_t length) {
     if (length >= 64) {
         return ~0ULL;
     }
@@ -18,8 +19,8 @@ static unsigned long long maskForLength(const size_t length) {
 
 static TritField tritfieldFromString(const char *text) {
     const size_t length = strlen(text);
-    unsigned long long x0 = 0ULL;
-    unsigned long long x1 = 0ULL;
+    BinaryLaneField x0 = 0ULL;
+    BinaryLaneField x1 = 0ULL;
 
     for (size_t i = 0; i < length; i++) {
         const char ch = text[i];
@@ -61,42 +62,42 @@ static bool isCanonical(const TritField value) {
 }
 
 static TritField rotateField(const TritField x, const TritField y) {
-    const unsigned long long mask = maskForLength(x.length);
+    const BinaryLaneField mask = maskForLength(x.length);
 
-    const unsigned long long yTrue = (y.x1 & y.x0) & mask;
-    const unsigned long long yFalse = (~y.x1 & ~y.x0) & mask;
-    const unsigned long long yAmbiguous = (~y.x1 & y.x0) & mask;
+    const BinaryLaneField yTrue = (y.x1 & y.x0) & mask;
+    const BinaryLaneField yFalse = (~y.x1 & ~y.x0) & mask;
+    const BinaryLaneField yAmbiguous = (~y.x1 & y.x0) & mask;
 
-    const unsigned long long up0 = (~x.x1) & mask;
-    const unsigned long long up1 = (x.x0 & ~x.x1) & mask;
+    const BinaryLaneField up0 = (~x.x1) & mask;
+    const BinaryLaneField up1 = (x.x0 & ~x.x1) & mask;
 
-    const unsigned long long down0 = ((~x.x0) | x.x1) & mask;
-    const unsigned long long down1 = (~x.x1 & ~x.x0) & mask;
+    const BinaryLaneField down0 = ((~x.x0) | x.x1) & mask;
+    const BinaryLaneField down1 = (~x.x1 & ~x.x0) & mask;
 
-    const unsigned long long r0 =
+    const BinaryLaneField r0 =
         ((yTrue & up0) | (yFalse & down0) | (yAmbiguous & x.x0)) & mask;
-    const unsigned long long r1 =
+    const BinaryLaneField r1 =
         ((yTrue & up1) | (yFalse & down1) | (yAmbiguous & x.x1)) & mask;
 
     return (TritField){.x0 = r0, .x1 = r1, .length = x.length};
 }
 
 static TritField adjustField(const TritField x, const TritField y) {
-    const unsigned long long mask = maskForLength(x.length);
+    const BinaryLaneField mask = maskForLength(x.length);
 
-    const unsigned long long yTrue = (y.x1 & y.x0) & mask;
-    const unsigned long long yFalse = (~y.x1 & ~y.x0) & mask;
-    const unsigned long long yAmbiguous = (~y.x1 & y.x0) & mask;
+    const BinaryLaneField yTrue = (y.x1 & y.x0) & mask;
+    const BinaryLaneField yFalse = (~y.x1 & ~y.x0) & mask;
+    const BinaryLaneField yAmbiguous = (~y.x1 & y.x0) & mask;
 
-    const unsigned long long up0 = (x.x0 | ~x.x1) & mask;
-    const unsigned long long up1 = x.x0 & mask;
+    const BinaryLaneField up0 = (x.x0 | ~x.x1) & mask;
+    const BinaryLaneField up1 = x.x0 & mask;
 
-    const unsigned long long down0 = x.x1 & mask;
-    const unsigned long long down1 = 0ULL;
+    const BinaryLaneField down0 = x.x1 & mask;
+    const BinaryLaneField down1 = 0ULL;
 
-    const unsigned long long r0 =
+    const BinaryLaneField r0 =
         ((yTrue & up0) | (yFalse & down0) | (yAmbiguous & x.x0)) & mask;
-    const unsigned long long r1 =
+    const BinaryLaneField r1 =
         ((yTrue & up1) | (yFalse & down1) | (yAmbiguous & x.x1)) & mask;
 
     return (TritField){.x0 = r0, .x1 = r1, .length = x.length};

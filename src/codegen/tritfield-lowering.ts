@@ -156,7 +156,7 @@ export function lowerTritfieldExpression(
                 ...right.setup,
                 {
                     kind: 'CVariableDeclaration',
-                    type: 'unsigned long long',
+                    type: 'BinaryLaneField',
                     name: x0Temp,
                     initializer: {
                         kind: 'CRawExpression',
@@ -165,7 +165,7 @@ export function lowerTritfieldExpression(
                 },
                 {
                     kind: 'CVariableDeclaration',
-                    type: 'unsigned long long',
+                    type: 'BinaryLaneField',
                     name: x1Temp,
                     initializer: {
                         kind: 'CRawExpression',
@@ -269,13 +269,13 @@ function lowerRotateTritfield(
             ...y.setup,
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r0Temp,
                 initializer: { kind: 'CRawExpression', code: r0 },
             },
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r1Temp,
                 initializer: { kind: 'CRawExpression', code: r1 },
             },
@@ -317,13 +317,13 @@ function lowerAdjustTritfield(
             ...y.setup,
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r0Temp,
                 initializer: { kind: 'CRawExpression', code: r0 },
             },
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r1Temp,
                 initializer: { kind: 'CRawExpression', code: r1 },
             },
@@ -365,13 +365,13 @@ function lowerModulateTritfield(
             ...y.setup,
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r0Temp,
                 initializer: { kind: 'CRawExpression', code: r0 },
             },
             {
                 kind: 'CVariableDeclaration',
-                type: 'unsigned long long',
+                type: 'BinaryLaneField',
                 name: r1Temp,
                 initializer: { kind: 'CRawExpression', code: r1 },
             },
