@@ -163,7 +163,7 @@ describe('codegen lowering behavior', () => {
         const serialized = JSON.stringify(ir)
 
         expect(serialized).toContain('truthvalue__toCString')
-        expect(serialized).toContain('tritfield__toStringRC')
+        expect(serialized).toContain('ternarylane__toStringRC')
         expect(serialized).toContain('fˇx0')
         expect(serialized).toContain('fˇx1')
     })
@@ -207,8 +207,8 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(parseClawr(source, 'test-annotated-fields.clawr'))
         const serialized = JSON.stringify(ir)
 
-        expect(serialized).toContain('bitfield__toStringRC')
-        expect(serialized).toContain('tritfield__toStringRC')
+        expect(serialized).toContain('binarylane__toStringRC')
+        expect(serialized).toContain('ternarylane__toStringRC')
     })
 
     it('lowers unary minus on integer identifiers via Integer¸subtract', () => {
@@ -574,7 +574,7 @@ describe('codegen lowering behavior', () => {
         )
     })
 
-    it('lowers bitfield.toString() to bitfield__toStringRC', () => {
+    it('lowers bitfield.toString() to binarylane__toStringRC', () => {
         const source = [
             'const a = bitfield("1010")',
             'const b = a & bitfield("1100")',
@@ -588,7 +588,7 @@ describe('codegen lowering behavior', () => {
         )
         const serialized = JSON.stringify(ir)
 
-        expect(serialized).toContain('bitfield__toStringRC')
+        expect(serialized).toContain('binarylane__toStringRC')
         expect(serialized).toContain('4U')
     })
 
