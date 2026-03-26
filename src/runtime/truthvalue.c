@@ -26,7 +26,7 @@ int modulate__by(int value, int by) {
     return (value - 1) * (by - 1) + 1;
 }
 
-const char* truthvalue__toCString(int value) {
+const char* truthvalue·toCString(int value) {
     int clamped = clamp_truthvalue(value);
     if (clamped == 0) return "false";
     if (clamped == 2) return "true";

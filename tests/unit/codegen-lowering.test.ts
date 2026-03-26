@@ -162,7 +162,7 @@ describe('codegen lowering behavior', () => {
         const ir = lowerToCIr(parseClawr(source, 'test-tostring-kinds.clawr'))
         const serialized = JSON.stringify(ir)
 
-        expect(serialized).toContain('truthvalue__toCString')
+        expect(serialized).toContain('truthvalue·toCString')
         expect(serialized).toContain('ternarylane__toStringRC')
         expect(serialized).toContain('fˇx0')
         expect(serialized).toContain('fˇx1')

@@ -2,7 +2,7 @@
 #include <stdio.h>
 
 static void print_tv(const char* label, int value) {
-    printf("%s: %s\n", label, truthvalue__toCString(value));
+    printf("%s: %s\n", label, truthvalue·toCString(value));
 }
 
 int main() {

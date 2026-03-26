@@ -119,7 +119,7 @@ function lowerStringExpression(
                 setup: [],
                 value: {
                     kind: 'CCallExpression',
-                    callee: 'truthvalue__toCString',
+                    callee: 'truthvalue·toCString',
                     args: [{ kind: 'CIdentifier', name: expression.name }],
                 },
             }
@@ -156,7 +156,7 @@ function lowerStringExpression(
             setup: lowered.setup,
             value: {
                 kind: 'CCallExpression',
-                callee: 'truthvalue__toCString',
+                callee: 'truthvalue·toCString',
                 args: [lowered.value],
             },
         }
@@ -181,7 +181,7 @@ function lowerStringExpression(
                     setup: [],
                     value: {
                         kind: 'CCallExpression',
-                        callee: 'truthvalue__toCString',
+                        callee: 'truthvalue·toCString',
                         args: [{ kind: 'CIdentifier', name: object.name }],
                     },
                 }
@@ -375,7 +375,7 @@ function lowerStringExpression(
                 setup: lowered.setup,
                 value: {
                     kind: 'CCallExpression',
-                    callee: 'truthvalue__toCString',
+                    callee: 'truthvalue·toCString',
                     args: [lowered.value],
                 },
             }
