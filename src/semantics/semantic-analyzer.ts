@@ -517,7 +517,7 @@ export class SemanticAnalyzer {
         functionSignatures: Map<string, FunctionSignature>,
     ) {
         if (statement.target.kind === 'MemberExpression') {
-            // DATA-ANALYZE-005: Enforce const/mut/ref rules for field writes
+            // DATA-ANALYZE-005: Enforce const/mut/ref rules for field writes and value set compatibility
             // Find the base variable (e.g., box in box.value = ...)
             let base = statement.target.object
             while (base.kind === 'MemberExpression') base = base.object
@@ -543,8 +543,40 @@ export class SemanticAnalyzer {
                 })
                 return
             }
-            // For mut/ref, allow field write (further type checks could be added here)
-            // Optionally: check that the field exists and value is compatible (future work)
+            // Check that the field exists and value is compatible
+            // Only check for data types
+            const baseValueSet = binding.allowed
+            if (baseValueSet.family === 'data') {
+                const dataType = this.dataTypes.get(baseValueSet.typeName)
+                if (!dataType) {
+                    this.diagnostics.push({
+                        position: statement.target.position,
+                        message: `unknown data type '${baseValueSet.typeName}' for variable '${base.name}'`,
+                    })
+                    return
+                }
+                const fieldInfo = dataType.fields.get(statement.target.property)
+                if (!fieldInfo) {
+                    this.diagnostics.push({
+                        position: statement.target.position,
+                        message: `unknown field '${statement.target.property}' for data type '${baseValueSet.typeName}'`,
+                    })
+                    return
+                }
+                const assigned = this.inferExpressionValueSet(
+                    statement.value,
+                    functionSignatures,
+                )
+                if (!assigned) return
+                if (!isSubsetValueSet(assigned, fieldInfo.valueSet)) {
+                    this.diagnostics.push({
+                        position: statement.position,
+                        message: `${describeValueSet(assigned)} is not assignable to field '${statement.target.property}' of type ${describeValueSet(fieldInfo.valueSet)}`,
+                    })
+                    return
+                }
+            }
+            // For non-data types, skip field check (future: support objects/services)
             return
         }
 

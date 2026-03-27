@@ -1203,6 +1203,21 @@ describe('DATA-ANALYZE-005: field mutation eligibility', () => {
             "cannot assign to field 'value' of const variable 'box'",
         )
     })
+
+    it('rejects field assignment on incompatible field', () => {
+        const program = parseClawr(
+            [
+                'data Box { value: integer }',
+                'mut box: Box = { value: 1 }',
+                'box.value = true',
+            ].join('\n'),
+            'test',
+        )
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "truthvalue[true] is not assignable to field 'value' of type integer",
+        )
+    })
 })
 
 function analyzeProgram(program: Program): SemanticProgram {
