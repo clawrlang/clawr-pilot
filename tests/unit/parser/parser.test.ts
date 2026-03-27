@@ -422,3 +422,45 @@ describe('parser if statements', () => {
         })
     })
 })
+
+describe('parser member assignments', () => {
+    it('parses member assignment statements', () => {
+        const program = parseClawr(
+            'mut box = { value: 1 }\nbox.value = 2',
+            'test',
+        )
+        expect(program.statements[1]).toMatchObject({
+            kind: 'AssignmentStatement',
+            target: {
+                kind: 'MemberExpression',
+                object: { kind: 'Identifier', name: 'box' },
+                property: 'value',
+            },
+            value: { kind: 'IntegerLiteral', value: 2n },
+        })
+    })
+
+    it('parses chained member assignment statements', () => {
+        const program = parseClawr(
+            'mut obj = { inner: { value: 1 } }\nobj.inner.value = 3',
+            'test',
+        )
+        expect(program.statements[1]).toMatchObject({
+            kind: 'AssignmentStatement',
+            target: {
+                kind: 'MemberExpression',
+                object: {
+                    kind: 'MemberExpression',
+                    object: { kind: 'Identifier', name: 'obj' },
+                    property: 'inner',
+                },
+                property: 'value',
+            },
+            value: { kind: 'IntegerLiteral', value: 3n },
+        })
+    })
+
+    it('rejects assignment to non-lvalue expressions', () => {
+        expect(() => parseClawr('mut x = 1\n(x + 1) = 2', 'test')).toThrow()
+    })
+})

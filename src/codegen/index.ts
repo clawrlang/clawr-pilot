@@ -670,6 +670,8 @@ function lowerAssignmentStatement(
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
+    if (statement.target.kind === 'MemberExpression') return
+
     const variableKind = variableKinds.get(statement.target.name)
     if (!variableKind) {
         throw new Error(

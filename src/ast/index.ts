@@ -191,10 +191,12 @@ export interface ReturnStatement {
     value: Expression | null
 }
 
+export type AssignmentTarget = IdentifierExpression | MemberExpression
+
 export interface AssignmentStatement {
     kind: 'AssignmentStatement'
     position: SourcePosition
-    target: IdentifierExpression
+    target: AssignmentTarget
     value: Expression
 }
 

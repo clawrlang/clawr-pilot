@@ -516,6 +516,8 @@ export class SemanticAnalyzer {
         statement: AssignmentStatement,
         functionSignatures: Map<string, FunctionSignature>,
     ) {
+        if (statement.target.kind === 'MemberExpression') return
+
         const binding = this.bindingStates.get(statement.target.name)
         if (!binding) {
             this.diagnostics.push({

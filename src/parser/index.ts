@@ -1036,26 +1036,26 @@ export class Parser {
     }
 
     tryParseAssignmentStatement(): AssignmentStatement | null {
-        const probe = this.stream.clone()
-        const maybeIdentifier = probe.next({ skippingNewline: true })
-        const maybeEquals = probe.peek({ skippingNewline: true })
-        if (
-            !maybeIdentifier ||
-            maybeIdentifier.kind !== 'IDENTIFIER' ||
-            !maybeEquals ||
-            maybeEquals.kind !== 'PUNCTUATION' ||
-            maybeEquals.symbol !== '='
-        ) {
-            return null
-        }
+        const myClone = new Parser('', this.file)
+        const target = this.stream.attempt((clone) => {
+            myClone.stream = clone
+            try {
+                const target = myClone.parseExpression()
+                if (
+                    target.kind !== 'Identifier' &&
+                    target.kind !== 'MemberExpression'
+                )
+                    return null
 
-        const identifier = this.stream.expect('IDENTIFIER')
-        const target: IdentifierExpression = {
-            kind: 'Identifier',
-            position: this.positionFromToken(identifier),
-            name: identifier.identifier,
-        }
-        this.stream.expect('PUNCTUATION', '=')
+                clone.expect('PUNCTUATION', '=')
+                return target
+            } catch (e) {
+                return null
+            }
+        })
+
+        if (!target) return null
+
         const value = this.parseExpression()
 
         return {
