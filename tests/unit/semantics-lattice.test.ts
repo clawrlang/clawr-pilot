@@ -1158,6 +1158,53 @@ describe('DATA-ANALYZE-003/004: data literal field validation', () => {
     })
 })
 
+describe('DATA-ANALYZE-005: field mutation eligibility', () => {
+    it('rejects field assignment on const variable', () => {
+        const program = parseClawr(
+            [
+                'data Box { value: integer }',
+                'const box: Box = { value: 1 }',
+                'box.value = 2',
+            ].join('\n'),
+            'test',
+        )
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).toContain(
+            "cannot assign to field 'value' of const variable 'box'",
+        )
+    })
+
+    it('allows field assignment on mut variable', () => {
+        const program = parseClawr(
+            [
+                'data Box { value: integer }',
+                'mut box: Box = { value: 1 }',
+                'box.value = 2',
+            ].join('\n'),
+            'test',
+        )
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).not.toContain(
+            "cannot assign to field 'value' of const variable 'box'",
+        )
+    })
+
+    it('allows field assignment on ref variable', () => {
+        const program = parseClawr(
+            [
+                'data Box { value: integer }',
+                'ref box: Box = { value: 1 }',
+                'box.value = 2',
+            ].join('\n'),
+            'test',
+        )
+        const semanticProgram = analyzeProgram(program)
+        expect(semanticProgram.diagnostics.map((d) => d.message)).not.toContain(
+            "cannot assign to field 'value' of const variable 'box'",
+        )
+    })
+})
+
 function analyzeProgram(program: Program): SemanticProgram {
     const analyzer = new SemanticAnalyzer()
     return analyzer.analyzeProgram(program)

@@ -516,7 +516,37 @@ export class SemanticAnalyzer {
         statement: AssignmentStatement,
         functionSignatures: Map<string, FunctionSignature>,
     ) {
-        if (statement.target.kind === 'MemberExpression') return
+        if (statement.target.kind === 'MemberExpression') {
+            // DATA-ANALYZE-005: Enforce const/mut/ref rules for field writes
+            // Find the base variable (e.g., box in box.value = ...)
+            let base = statement.target.object
+            while (base.kind === 'MemberExpression') base = base.object
+            if (base.kind !== 'Identifier') {
+                this.diagnostics.push({
+                    position: statement.target.position,
+                    message: `invalid field assignment target: must be a variable or member of a variable`,
+                })
+                return
+            }
+            const binding = this.bindingStates.get(base.name)
+            if (!binding) {
+                this.diagnostics.push({
+                    position: base.position,
+                    message: `unknown identifier '${base.name}' in field assignment`,
+                })
+                return
+            }
+            if (binding.semantics === 'const') {
+                this.diagnostics.push({
+                    position: statement.position,
+                    message: `cannot assign to field '${statement.target.property}' of const variable '${base.name}'`,
+                })
+                return
+            }
+            // For mut/ref, allow field write (further type checks could be added here)
+            // Optionally: check that the field exists and value is compatible (future work)
+            return
+        }
 
         const binding = this.bindingStates.get(statement.target.name)
         if (!binding) {

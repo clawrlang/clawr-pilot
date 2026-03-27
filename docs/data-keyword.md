@@ -144,7 +144,7 @@ This section turns the V1 spec into concrete tickets ordered by dependency.
 7. `DATA-ANALYZE-004` Field value compatibility checks ✅
    - Scope: Validate each literal field expression against declared ValueSet.
 
-8. `DATA-ANALYZE-005` Field mutation eligibility checks
+8. `DATA-ANALYZE-005` Field mutation eligibility checks ✅
    - Scope: Enforce `const`/`mut`/`ref` rules for field write operations.
    - Blocked: needs parsing of dot operator and field assignment
 
