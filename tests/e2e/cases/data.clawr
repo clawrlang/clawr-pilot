@@ -1,3 +1,5 @@
 data Data { value: truthvalue }
 
-const d: Data = { value: ambiguous }
+mut d: Data = { value: ambiguous }
+d.value = true
+print(ambiguous)

@@ -153,7 +153,7 @@ This section turns the V1 spec into concrete tickets ordered by dependency.
 9. `DATA-CODEGEN-001` Data type lowering and metadata emission ✅
    - Scope: Lower each `data` declaration to C struct + `__type_info`.
 
-10. `DATA-CODEGEN-002` Data literal allocation lowering
+10. `DATA-CODEGEN-002` Data literal allocation lowering ✅
     - Scope: Lower context-typed literals to `allocRC` + field initialization.
 
 11. `DATA-CODEGEN-003` Field access and field mutation lowering
