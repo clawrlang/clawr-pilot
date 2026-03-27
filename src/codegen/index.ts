@@ -725,169 +725,104 @@ function lowerAssignmentStatement(
         }
         // For mut variables, emit mutateRC before field write
         lowerMutationPreparation(object.name, statements, mutationStrategies)
-        // Only emit releaseRC for pointer fields (handled below)
-        // Lower the value expression (support only simple types for now)
-        let valueExpr: CExpression
-        if (statement.value.kind === 'IntegerLiteral') {
-            valueExpr = {
-                kind: 'CCallExpression',
-                callee: 'clawr_int_from_i64',
-                args: [
-                    {
-                        kind: 'CIntegerLiteral',
-                        value: `${statement.value.value.toString()}LL`,
-                    },
-                ],
-            }
-            if (statement.target.kind === 'MemberExpression') {
-                // Lower the object (should be an identifier for V1)
-                const object = statement.target.object
-                if (object.kind !== 'Identifier') {
-                    throw new Error(
-                        'Field assignment only supported for variable.field in this vertical slice',
-                    )
-                }
-                // Find the data type and field type
-                // (Assume variableKinds.get(object.name) is the data type name for subset-alias)
-                let fieldCType: string | null = null
-                // Try to find the declaration in the program (hack: walk global statements)
-                if (globalThis && (globalThis as any).clawrProgramStatements) {
-                    const stmts = (globalThis as any)
-                        .clawrProgramStatements as any[]
-                    const decl = stmts.find(
-                        (s) =>
-                            s.kind === 'DataDeclaration' &&
-                            s.identifier.name ===
-                                variableKinds.get(object.name),
-                    )
-                    if (decl) {
-                        const memberTarget =
-                            statement.target as import('../ast').MemberExpression
-                        const fieldDecl = decl.fields.find(
-                            (f: any) => f.name === memberTarget.property,
-                        )
-                        if (fieldDecl) {
-                            const t = fieldDecl.typeAnnotation
-                            if (t.kind === 'subset') {
-                                if (t.family === 'integer')
-                                    fieldCType = 'Integer*'
-                                else if (t.family === 'real')
-                                    fieldCType = 'Real*'
-                                else if (t.family === 'truthvalue')
-                                    fieldCType = 'int'
-                                else if (t.family === 'string')
-                                    fieldCType = 'String*'
-                            } else if (t.kind === 'subset-alias') {
-                                fieldCType = `${t.name}*`
-                            } else {
-                                fieldCType = null
-                            }
-                        } else {
-                            fieldCType = null
-                        }
+        // Find the data type and field type
+        let fieldCType: string | null = null
+        if (globalThis && (globalThis as any).clawrProgramStatements) {
+            const stmts = (globalThis as any).clawrProgramStatements as any[]
+            const decl = stmts.find(
+                (s) =>
+                    s.kind === 'DataDeclaration' &&
+                    s.identifier.name === variableKinds.get(object.name),
+            )
+            if (decl) {
+                const memberTarget =
+                    statement.target as import('../ast').MemberExpression
+                const fieldDecl = decl.fields.find(
+                    (f: any) => f.name === memberTarget.property,
+                )
+                if (fieldDecl) {
+                    const t = fieldDecl.typeAnnotation
+                    if (t.kind === 'subset') {
+                        if (t.family === 'integer') fieldCType = 'Integer*'
+                        else if (t.family === 'real') fieldCType = 'Real*'
+                        else if (t.family === 'truthvalue') fieldCType = 'int'
+                        else if (t.family === 'string') fieldCType = 'String*'
+                    } else if (t.kind === 'subset-alias') {
+                        fieldCType = `${t.name}*`
                     } else {
                         fieldCType = null
                     }
                 }
-                // For mut variables, emit mutateRC before field write
-                lowerMutationPreparation(
-                    object.name,
-                    statements,
-                    mutationStrategies,
-                )
-                // Only emit releaseRC/retainRC for pointer fields
-                const isPointerField = fieldCType && fieldCType.endsWith('*')
-                const memberTarget =
-                    statement.target as import('../ast').MemberExpression
-                // DEBUG: Output fieldCType and isPointerField for diagnostics
-                // console.log('Field assignment:', memberTarget.property, 'fieldCType:', fieldCType, 'isPointerField:', isPointerField);
-                // DEBUG: Only emit releaseRC for pointer fields; skip for primitives
-                if (
-                    typeof fieldCType === 'string' &&
-                    fieldCType.endsWith('*')
-                ) {
-                    // console.log('Emitting releaseRC for field', memberTarget.property, 'with fieldCType', fieldCType);
-                    statements.push({
-                        kind: 'CExpressionStatement',
-                        expression: {
-                            kind: 'CCallExpression',
-                            callee: 'releaseRC',
-                            args: [
-                                {
-                                    kind: 'CRawExpression',
-                                    code: `${object.name}->${memberTarget.property}`,
-                                },
-                            ],
+            }
+        }
+        const memberTarget =
+            statement.target as import('../ast').MemberExpression
+        const isPointerField = fieldCType && fieldCType.endsWith('*')
+        // Only emit releaseRC for pointer fields
+        if (isPointerField) {
+            statements.push({
+                kind: 'CExpressionStatement',
+                expression: {
+                    kind: 'CCallExpression',
+                    callee: 'releaseRC',
+                    args: [
+                        {
+                            kind: 'CRawExpression',
+                            code: `${object.name}->${memberTarget.property}`,
                         },
-                    })
-                } else {
-                    // Skipping releaseRC for non-pointer field: emit no RC call for fieldCType = '" + String(fieldCType) + "'.
-                }
-                // Lower the value expression (support only simple types for now)
-                type FieldValueExpr =
-                    | import('../ast').IntegerLiteralExpression
-                    | import('../ast').RealLiteralExpression
-                    | import('../ast').TruthLiteralExpression
-                    | import('../ast').StringLiteralExpression
-                    | import('../ast').IdentifierExpression
-                const fieldValue = statement.value as FieldValueExpr
-                let valueExpr: CExpression | undefined = undefined
-                switch (fieldValue.kind) {
-                    case 'IntegerLiteral':
-                        valueExpr = {
-                            kind: 'CCallExpression',
-                            callee: 'clawr_int_from_i64',
-                            args: [
-                                {
-                                    kind: 'CIntegerLiteral',
-                                    value: `${fieldValue.value.toString()}LL`,
-                                },
-                            ],
-                        }
-                        break
-                    case 'RealLiteral':
-                        valueExpr = {
-                            kind: 'CCallExpression',
-                            callee: 'Real¸fromString',
-                            args: [
-                                {
-                                    kind: 'CStringLiteral',
-                                    value: fieldValue.value,
-                                },
-                            ],
-                        }
-                        break
-                    case 'TruthLiteral':
-                        valueExpr = {
+                    ],
+                },
+            })
+        }
+        // Lower the value expression
+        let valueExpr: CExpression | undefined = undefined
+        switch (statement.value.kind) {
+            case 'IntegerLiteral':
+                valueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'clawr_int_from_i64',
+                    args: [
+                        {
                             kind: 'CIntegerLiteral',
-                            value: cTruthValue(fieldValue.value),
-                        }
-                        break
-                    case 'StringLiteral':
-                        valueExpr = {
-                            kind: 'CCallExpression',
-                            callee: 'String¸fromCString',
-                            args: [
-                                {
-                                    kind: 'CStringLiteral',
-                                    value: fieldValue.value,
-                                },
-                            ],
-                        }
-                        break
-                    case 'Identifier':
-                        valueExpr = {
-                            kind: 'CIdentifier',
-                            name: fieldValue.name,
-                        }
-                        break
-                    default:
-                        throw new Error(
-                            'Only simple literal and identifier field values supported for field assignment in this slice',
-                        )
+                            value: `${statement.value.value.toString()}LL`,
+                        },
+                    ],
                 }
+                break
+            case 'RealLiteral':
+                valueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'Real¸fromString',
+                    args: [
+                        {
+                            kind: 'CStringLiteral',
+                            value: statement.value.value,
+                        },
+                    ],
+                }
+                break
+            case 'TruthLiteral':
+                valueExpr = {
+                    kind: 'CIntegerLiteral',
+                    value: cTruthValue(statement.value.value),
+                }
+                break
+            case 'StringLiteral':
+                valueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'String¸fromCString',
+                    args: [
+                        {
+                            kind: 'CStringLiteral',
+                            value: statement.value.value,
+                        },
+                    ],
+                }
+                break
+            case 'Identifier':
+                valueExpr = { kind: 'CIdentifier', name: statement.value.name }
                 // Only emit retainRC for pointer fields and identifier values
-                if (isPointerField && fieldValue.kind === 'Identifier') {
+                if (isPointerField) {
                     statements.push({
                         kind: 'CExpressionStatement',
                         expression: {
@@ -896,24 +831,27 @@ function lowerAssignmentStatement(
                             args: [
                                 {
                                     kind: 'CIdentifier',
-                                    name: fieldValue.name,
+                                    name: statement.value.name,
                                 },
                             ],
                         },
                     })
                 }
-                // Emit the field assignment
-                statements.push({
-                    kind: 'CAssignmentStatement',
-                    target: {
-                        kind: 'CRawExpression',
-                        code: `${object.name}->${memberTarget.property}`,
-                    },
-                    value: valueExpr!, // valueExpr is always set above
-                })
-                return
-            }
+                break
+            default:
+                throw new Error(
+                    'Only simple literal and identifier field values supported for field assignment in this slice',
+                )
         }
+        // Emit the field assignment
+        statements.push({
+            kind: 'CAssignmentStatement',
+            target: {
+                kind: 'CRawExpression',
+                code: `${object.name}->${memberTarget.property}`,
+            },
+            value: valueExpr!,
+        })
         return
     }
 
