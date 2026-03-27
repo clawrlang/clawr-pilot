@@ -104,11 +104,17 @@ export interface CRawExpression {
 export function emitC(unit: CTranslationUnit): string {
     const lines: string[] = []
 
+    // Emit includes first
     for (const include of unit.includes) {
         lines.push(`#include ${include}`)
     }
-
     if (unit.includes.length > 0) lines.push('')
+
+    // Emit raw preamble (structs/typeinfo) after includes
+    if ((unit as any).raw && typeof (unit as any).raw === 'string') {
+        lines.push((unit as any).raw)
+        lines.push('')
+    }
 
     for (let i = 0; i < unit.functions.length; i++) {
         lines.push(...emitFunction(unit.functions[i]))

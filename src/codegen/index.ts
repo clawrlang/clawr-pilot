@@ -46,6 +46,8 @@ export function lowerToCIr(
 ): CTranslationUnit {
     const mainStatements: CStatement[] = []
     const loweredFunctions: CFunction[] = []
+    const dataStructs: string[] = []
+    const dataTypeInfos: string[] = []
     const heapLocals: string[] = []
     const variableKinds = new Map<string, RuntimeType>()
     const mutationStrategies = new Map<string, MutationStrategy>()
@@ -56,6 +58,35 @@ export function lowerToCIr(
     let tempCounter = 0
 
     for (const statement of program.statements) {
+        if (statement.kind === 'DataDeclaration') {
+            // Emit C struct for the data type
+            const structName = statement.identifier.name
+            const fields = statement.fields
+                .map((field) => {
+                    let cType = 'void*';
+                    const t = field.typeAnnotation;
+                    if (t.kind === 'subset') {
+                        if (t.family === 'integer') cType = 'Integer*';
+                        else if (t.family === 'real') cType = 'Real*';
+                        else if (t.family === 'truthvalue') cType = 'int';
+                        else if (t.family === 'string') cType = 'String*';
+                    } else if (t.kind === 'subset-alias') {
+                        cType = `${t.name}*`;
+                    }
+                    return `    ${cType} ${field.name};`;
+                })
+                .join('\n');
+            // Use correct header field name
+            dataStructs.push(
+                `typedef struct ${structName} {\n    __rc_header header;\n${fields}\n} ${structName};`
+            );
+
+            // Emit __type_info with correct name and structure
+            dataTypeInfos.push(
+                `static const __type_info ${structName}ˇtype = {\n    .data_type = { .size = sizeof(${structName}) }\n};`
+            );
+            continue
+        }
         if (statement.kind === 'FunctionDeclaration') {
             loweredFunctions.push(
                 lowerFunctionDeclaration(
@@ -66,7 +97,6 @@ export function lowerToCIr(
             )
             continue
         }
-
         lowerStatement(
             statement,
             mainStatements,
@@ -95,9 +125,17 @@ export function lowerToCIr(
         value: { kind: 'CIntegerLiteral', value: '0' },
     })
 
+    // Prepend struct/typeinfo definitions as raw C code (to be handled by backend)
+    // This is a vertical slice hack: in a real backend, these would be emitted as C AST nodes or in a header.
+    const preamble: string[] = []
+    if (dataStructs.length > 0) preamble.push(...dataStructs)
+    if (dataTypeInfos.length > 0) preamble.push(...dataTypeInfos)
+
     return {
         kind: 'CTranslationUnit',
         includes: ['"runtime.h"', '<stdio.h>', '<stdlib.h>'],
+        // @ts-expect-error: Add preamble as a fake 'raw' field for backend to splice in
+        raw: preamble.join('\n\n'),
         functions: [
             {
                 kind: 'CFunction',
