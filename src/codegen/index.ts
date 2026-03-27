@@ -1,3 +1,9 @@
+// Helper for RC semantics for DATA-CODEGEN-002
+function semanticsToRcFlag(semantics: string): string {
+    if (semantics === 'ref') return '__rc_SHARED'
+    if (semantics === 'const') return '__rc_ISOLATED' // treat const as isolated for now
+    return '__rc_ISOLATED'
+}
 import type {
     AssignmentStatement,
     CallExpression,
@@ -63,28 +69,28 @@ export function lowerToCIr(
             const structName = statement.identifier.name
             const fields = statement.fields
                 .map((field) => {
-                    let cType = 'void*';
-                    const t = field.typeAnnotation;
+                    let cType = 'void*'
+                    const t = field.typeAnnotation
                     if (t.kind === 'subset') {
-                        if (t.family === 'integer') cType = 'Integer*';
-                        else if (t.family === 'real') cType = 'Real*';
-                        else if (t.family === 'truthvalue') cType = 'int';
-                        else if (t.family === 'string') cType = 'String*';
+                        if (t.family === 'integer') cType = 'Integer*'
+                        else if (t.family === 'real') cType = 'Real*'
+                        else if (t.family === 'truthvalue') cType = 'int'
+                        else if (t.family === 'string') cType = 'String*'
                     } else if (t.kind === 'subset-alias') {
-                        cType = `${t.name}*`;
+                        cType = `${t.name}*`
                     }
-                    return `    ${cType} ${field.name};`;
+                    return `    ${cType} ${field.name};`
                 })
-                .join('\n');
+                .join('\n')
             // Use correct header field name
             dataStructs.push(
-                `typedef struct ${structName} {\n    __rc_header header;\n${fields}\n} ${structName};`
-            );
+                `typedef struct ${structName} {\n    __rc_header header;\n${fields}\n} ${structName};`,
+            )
 
             // Emit __type_info with correct name and structure
             dataTypeInfos.push(
-                `static const __type_info ${structName}ˇtype = {\n    .data_type = { .size = sizeof(${structName}) }\n};`
-            );
+                `static const __type_info ${structName}ˇtype = {\n    .data_type = { .size = sizeof(${structName}) }\n};`,
+            )
             continue
         }
         if (statement.kind === 'FunctionDeclaration') {
@@ -1085,6 +1091,104 @@ function lowerVariableDeclaration(
     bitfieldLengths: Map<string, number>,
     nextTemp: () => string,
 ) {
+    // DATA-CODEGEN-002: Lower context-typed data literals to allocRC + field initialization
+    if (
+        statement.initializer.kind === 'DataLiteral' &&
+        statement.typeAnnotation &&
+        statement.typeAnnotation.kind === 'subset-alias'
+    ) {
+        const typeName = statement.typeAnnotation.name
+        const structType = `${typeName}*`
+        const tempVar = nextTemp()
+        // Allocate the struct
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: structType,
+            name: tempVar,
+            initializer: {
+                kind: 'CCallExpression',
+                callee: 'allocRC',
+                args: [
+                    { kind: 'CIdentifier', name: typeName },
+                    {
+                        kind: 'CIdentifier',
+                        name: semanticsToRcFlag(statement.semantics),
+                    },
+                ],
+            },
+        })
+        // Lower each field assignment
+        for (const field of statement.initializer.fields) {
+            // Lower the field value expression
+            // For now, only support integer, real, truthvalue, string, and identifier expressions
+            let fieldValueExpr
+            if (field.value.kind === 'IntegerLiteral') {
+                fieldValueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'clawr_int_from_i64',
+                    args: [
+                        {
+                            kind: 'CIntegerLiteral',
+                            value: `${field.value.value.toString()}LL`,
+                        },
+                    ],
+                } as CExpression
+            } else if (field.value.kind === 'RealLiteral') {
+                fieldValueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'Real¸fromString',
+                    args: [
+                        { kind: 'CStringLiteral', value: field.value.value },
+                    ],
+                } as CExpression
+            } else if (field.value.kind === 'TruthLiteral') {
+                fieldValueExpr = {
+                    kind: 'CIntegerLiteral',
+                    value: cTruthValue(field.value.value),
+                } as CExpression
+            } else if (field.value.kind === 'StringLiteral') {
+                fieldValueExpr = {
+                    kind: 'CCallExpression',
+                    callee: 'String¸fromCString',
+                    args: [
+                        { kind: 'CStringLiteral', value: field.value.value },
+                    ],
+                } as CExpression
+            } else if (field.value.kind === 'Identifier') {
+                fieldValueExpr = {
+                    kind: 'CIdentifier',
+                    name: field.value.name,
+                } as CExpression
+            } else {
+                throw new Error(
+                    'Only simple literal and identifier field values supported for data literal lowering in this slice',
+                )
+            }
+            statements.push({
+                kind: 'CAssignmentStatement',
+                target: {
+                    kind: 'CRawExpression',
+                    code: `${tempVar}->${field.name}`,
+                },
+                value: fieldValueExpr,
+            })
+        }
+        // Assign the temp to the declared variable
+        statements.push({
+            kind: 'CVariableDeclaration',
+            type: structType,
+            name: statement.identifier.name,
+            initializer: { kind: 'CIdentifier', name: tempVar },
+        })
+        heapLocals.push(statement.identifier.name)
+        // Do not set variableKinds for 'data' (not a valid RuntimeType)
+        mutationStrategies.set(
+            statement.identifier.name,
+            statement.semantics === 'ref' ? 'shared-in-place' : 'isolated-cow',
+        )
+        return
+    }
+
     const laneAnnotation =
         statement.typeAnnotation && statement.typeAnnotation.kind === 'lane'
             ? statement.typeAnnotation
